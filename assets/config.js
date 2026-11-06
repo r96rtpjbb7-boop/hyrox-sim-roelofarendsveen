@@ -17,7 +17,7 @@ window.HYROX_CONFIG = {
     //   '2027-03-14'                  alleen de datum: "nog 128 dagen"
     //   '2027-03-14T08:00:00+01:00'   met starttijd: aftelklok tot op de seconde
     // null = "datum volgt".
-    start: '2027-03-14',
+    start: '2027-03-14T08:00:00+01:00',
     location: 'HAL60, Roelofarendsveen'
   },
 

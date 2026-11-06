@@ -40,6 +40,19 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await p.waitForSelector('#lb-list .lb-row');
   await p.addStyleTag({ content: 'html{scroll-behavior:auto!important}' });
 
+  // Logos of the organising clubs
+  const logoInfo = sel => p.$$eval(sel, imgs => imgs.map(i => ({ alt: i.alt, ok: i.complete && i.naturalWidth > 0, h: Math.round(i.getBoundingClientRect().height) })));
+  const heroLogos = await logoInfo('.hero .orgs img');
+  check('hero shows both club logos', heroLogos.length === 2 && heroLogos.every(l => l.ok && l.h >= 20) && heroLogos.map(l => l.alt).join('|') === 'Club Confidence|By Opdam', heroLogos);
+  // What a screen reader says: alt texts of the images, hidden helper text, not the decorative ×.
+  const spoken = await p.$eval('.hero .orgs', e => [...e.childNodes].map(n => n.nodeType === 3 ? n.textContent : n.getAttribute('aria-hidden') === 'true' ? '' : n.tagName === 'IMG' ? n.alt : n.textContent).join('').replace(/\s+/g, ' ').trim());
+  check('hero logos read as "Georganiseerd door Club Confidence en By Opdam"', spoken === 'Georganiseerd door Club Confidence en By Opdam', spoken);
+  await p.$eval('footer', f => f.scrollIntoView());
+  await p.waitForFunction(() => [...document.querySelectorAll('footer img')].every(i => i.complete && i.naturalWidth > 0));
+  const footLogos = await logoInfo('footer .foot-logo img');
+  check('footer headings are the club logos', footLogos.length === 2 && footLogos.every(l => l.ok) && footLogos.map(l => l.alt).join('|') === 'Club Confidence|By Opdam', footLogos);
+  await p.$eval('#top', e => e.scrollIntoView());
+
   // Leaderboard
   check('client created with project url and publishable key', await p.evaluate(() => window.__clientArgs.url.includes('ocdnerhyssvkjhdgstvp') && window.__clientArgs.key.startsWith('sb_publishable_')));
   check('default event is latest edition', (await p.$eval('#lb-event', s => s.value)) === 'sim-04');
@@ -325,6 +338,8 @@ const wait = (p, ms) => p.waitForTimeout(ms);
     await q.addStyleTag({ content: 'html{scroll-behavior:auto!important}' });
     const sw = await q.evaluate(() => document.documentElement.scrollWidth);
     check('no horizontal scroll at ' + w, sw <= w, sw);
+    const tops = await q.$$eval('.hero .orgs img', imgs => imgs.map(i => i.getBoundingClientRect()).map(r => Math.round(r.top + r.height / 2)));
+    check('club logos side by side at ' + w, tops.length === 2 && Math.abs(tops[0] - tops[1]) <= 2, tops);
     await q.$eval('#leaderboard', e => e.scrollIntoView());
     await wait(q, 200);
     if (w === 390) {

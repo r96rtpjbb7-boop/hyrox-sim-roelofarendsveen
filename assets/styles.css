@@ -85,6 +85,13 @@ section[id], main[id] { scroll-margin-top: 84px; }
 .hero h1 { font-size: clamp(66px, 11vw, 172px); max-width: 920px; }
 .hero h1 em { font-style: normal; color: var(--accent); }
 .hero .eyebrow { color: var(--fg); text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6); }
+/* Logos of the two organising clubs, in their own colours. --h is the height of the
+   Club Confidence logo; By Opdam is a single line, so it gets about half that height. */
+.orgs { --h: clamp(36px, 10.5vw, 60px); display: flex; flex-wrap: wrap; align-items: center; gap: 10px clamp(12px, 2.4vw, 22px); margin: 0 0 -4px; }
+.orgs img { display: block; width: auto; filter: drop-shadow(0 1px 10px rgba(0, 0, 0, 0.55)); }
+.orgs .logo-cc { height: var(--h); }
+.orgs .logo-bo { height: calc(var(--h) * 0.47); }
+.orgs-x { font: 500 calc(var(--h) * 0.38)/1 var(--mono); color: var(--fg-2); }
 .hero p.lead { margin: 0; max-width: 560px; font-size: 19px; color: var(--fg-2); }
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
 .countdown { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; font: 600 13px/1.2 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-2); }
@@ -256,6 +263,10 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .footer { border-top: 1px solid var(--line); padding-block: 48px calc(48px + env(safe-area-inset-bottom, 0px)); }
 .footer .wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
 .footer h4 { margin: 0 0 8px; font: 900 24px/1 var(--display); text-transform: uppercase; }
+.footer h4.foot-logo { display: flex; align-items: center; height: 56px; margin-bottom: 14px; }
+.foot-logo img { display: block; width: auto; }
+.foot-logo .logo-cc { height: 54px; }
+.foot-logo .logo-bo { height: 25px; }
 .footer p { margin: 0; color: var(--muted); font-size: 14px; }
 .footer a { color: var(--fg-2); }
 .footer .fine { grid-column: 1 / -1; padding-top: 24px; border-top: 1px solid var(--line); font: 500 12px/1.5 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

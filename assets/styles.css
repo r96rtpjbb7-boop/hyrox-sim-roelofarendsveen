@@ -242,6 +242,26 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 }
 @media (max-width: 460px) { .splits { grid-template-columns: repeat(2, minmax(0, 1fr)); } .seg button { padding: 12px 12px; font-size: 12px; } }
 
+/* Official timing (RaceClocker) and live on race day */
+.chip .cnt { margin-left: 6px; font: 600 12px/1 var(--mono); letter-spacing: 0; opacity: 0.75; }
+.lb-summary .v-sm { font: 700 19px/1.25 var(--body); }
+.lb-summary .v-sm a { color: var(--accent); text-underline-offset: 3px; }
+.lb-summary .is-live .k { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); }
+.live-dot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.lb-live { margin: 26px 0 30px; }
+.lb-sub { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font: 900 28px/1 var(--display); text-transform: uppercase; }
+.lb-sub small { font: 600 14px/1 var(--mono); color: var(--muted); }
+.rk-sm { font-size: 20px; color: var(--fg-2); }
+.rk-sm small { font: 600 11px/1 var(--mono); color: var(--muted); }
+.badge.live { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.55); }
+.bar i.mx { background: repeating-linear-gradient(135deg, var(--run) 0 4px, var(--accent) 4px 8px); }
+.bar-prog { background: var(--line); }
+.bar-prog i { flex: none; background: var(--accent); }
+.sp.unk b { color: var(--muted); }
+.tm-dnf { color: var(--muted); }
+.team-names { margin: 0 0 10px; }
+
 /* Gallery */
 .gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .gallery figure { margin: 0; position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--bg-3); max-width: 100%; }

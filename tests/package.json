@@ -1,8 +1,8 @@
 {
   "name": "hyrox-sim-site-tests",
   "private": true,
-  "description": "Browser tests of the site: e2e.js against a fake Supabase client, login-real.js against the real supabase-js with a mocked server. Serve the site folder on 127.0.0.1:8765 first.",
-  "scripts": { "test": "node e2e.js http://127.0.0.1:8765/ && node login-real.js http://127.0.0.1:8765/" },
+  "description": "Tests of the site: raceclocker-normalise.test.mjs for the RaceClocker edge function, e2e.js in the browser against a fake Supabase client, login-real.js against the real supabase-js with a mocked server. Serve the site folder on 127.0.0.1:8765 first.",
+  "scripts": { "test": "node --experimental-strip-types raceclocker-normalise.test.mjs && node e2e.js http://127.0.0.1:8765/ && node login-real.js http://127.0.0.1:8765/" },
   "devDependencies": {
     "@supabase/supabase-js": "2.45.4",
     "@fontsource/archivo": "^5.0.0",

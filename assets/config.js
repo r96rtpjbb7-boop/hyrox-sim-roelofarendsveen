@@ -24,6 +24,13 @@ window.HYROX_CONFIG = {
   // Link naar het inschrijfformulier zodra de inschrijving open is. null = "opent binnenkort".
   signupUrl: null,
 
+  // Officiële tijdwaarneming met RaceClocker: per editie (id in de tabel events) de code uit de
+  // RaceClocker-link, bijvoorbeeld raceclocker.com/f4b23f3b. Het leaderboard toont dan de uitslag
+  // uit RaceClocker met alle rondetijden, en op de racedag live. Zelf een tijd invullen kan dan
+  // niet meer voor die editie. Nieuwe editie? Zet de code hier en in
+  // supabase/functions/raceclocker/index.ts (met de racedatum).
+  raceclocker: { 'sim-03': 'f4b23f3b' },
+
   // Voorlopig programma. Pas aan of maak leeg ([]) om "programma volgt" te tonen.
   programme: [
     ['07:30', 'Zaal open, startnummers ophalen'],

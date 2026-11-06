@@ -11,12 +11,66 @@ const fontCss = FONTS.flatMap(([fam, dir, ws]) => ws.map(w => `@font-face{font-f
 let failures = 0;
 function check(name, ok, extra) { console.log((ok ? 'PASS ' : 'FAIL ') + name + (extra !== undefined ? '  -> ' + JSON.stringify(extra) : '')); if (!ok) failures++; }
 
+// RaceClocker results as the edge function "raceclocker" returns them (see normalise.ts).
+const SEGS = [300, 240, 310, 200, 320, 260, 330, 280, 340, 300, 350, 270, 360, 290, 370, 420];
+const scaled = total => { const t = SEGS.reduce((a, b) => a + b, 0); const o = SEGS.map(x => Math.round(x * total / t)); o[15] += total - o.reduce((a, b) => a + b, 0); return o; };
+const amsDay = ms => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+function rcEntry(o) {
+  const status = o.status || 'finished';
+  const splits = o.splits !== undefined ? o.splits : status === 'finished' ? scaled(o.total - (o.penalty || 0)) : null;
+  return Object.assign({ bib: o.bib, name: o.name, names: o.name.split(/\s*(?:&|,)\s*/), cat: o.cat, cat_raw: '', age: o.age !== undefined ? o.age : '35-60', wave: '1 08:00', status, laps: o.laps !== undefined ? o.laps : 16, total: o.total || null, splits, penalty: o.penalty || 0, start: o.start !== undefined ? o.start : Date.parse('2026-10-18T06:00:00Z'), last: null }, o.extra || {});
+}
+const gapped = (() => { const sp = scaled(4500); const s = sp[2] + sp[3] + sp[4]; sp[2] = sp[3] = sp[4] = null; return { splits: sp, merged: [{ from: 2, to: 4, s }] }; })();
+const RC_ARCHIVE = () => ({
+  v: 3, race: 'f4b23f3b', event: 'sim-03', date: '2026-10-18', live: false, fetched_at: new Date().toISOString(),
+  entries: [
+    rcEntry({ bib: '101', name: 'Snelle Sander', cat: 'single_men', total: 3900, age: '16-34' }),
+    rcEntry({ bib: '102', name: 'Gelijke Gijs', cat: 'single_men', total: 4100 }),
+    rcEntry({ bib: '103', name: 'Gelijke Gert', cat: 'single_men', total: 4100 }),
+    rcEntry({ bib: '104', name: 'Gemiste Gerrit', cat: 'single_men', total: 4500, splits: gapped.splits, extra: { merged: gapped.merged } }),
+    rcEntry({ bib: '105', name: 'Uitvaller Udo', cat: 'single_men', status: 'dnf', laps: 4, splits: SEGS.slice(0, 4) }),
+    rcEntry({ bib: '106', name: 'Thuisblijver Tom', cat: 'single_men', status: 'dns', laps: 0 }),
+    rcEntry({ bib: '201', name: 'Anna Snel & Bea Snel', cat: 'doubles_women', total: 4800, penalty: 240, extra: { penalty_note: '2 banen lunges te weinig' } }),
+    rcEntry({ bib: '301', name: 'Piet Een, Jan Twee, Kees Drie & Klaas Vier', cat: 'relay', total: 5000, age: '' }),
+    rcEntry({ bib: '401', name: 'Kind Kim', cat: 'kids', total: 1150, splits: null, age: '' }),
+    rcEntry({ bib: '402', name: 'Kind Kai', cat: 'kids', total: 1370, splits: null, age: '' })
+  ],
+  skipped: [], issues: [], stats: {}
+});
+// Race day of edition 04: stage 1 has two athletes on the course, from stage 2 on one of them is in.
+function RC_LIVE(stage) {
+  const now = Date.now(), start = now - 40 * 60e3, early = now - 70 * 60e3;
+  return {
+    v: 3, race: 'abcd1234', event: 'sim-04', date: amsDay(now), live: true, fetched_at: new Date().toISOString(),
+    entries: [
+      rcEntry({ bib: '501', name: 'Live Lars', cat: 'single_men', total: 3500, start: early }),
+      rcEntry({ bib: '502', name: 'Live Luuk', cat: 'single_men', total: 3600, start: early }),
+      stage === 1
+        ? rcEntry({ bib: '503', name: 'Rennende Ruud', cat: 'single_men', status: 'running', laps: 9, splits: SEGS.slice(0, 9), start })
+        : rcEntry({ bib: '503', name: 'Rennende Ruud', cat: 'single_men', total: 3700, start }),
+      rcEntry({ bib: '504', name: 'Rennende Rik', cat: 'single_men', status: 'running', laps: 6, splits: SEGS.slice(0, 6), start }),
+      rcEntry({ bib: '505', name: 'Wachtende Wim', cat: 'single_men', status: 'waiting', laps: 0, start: null })
+    ],
+    skipped: [], issues: [], stats: {}
+  };
+}
+// Remove the RaceClocker line from config.js, for tests of self-reported times on edition 03.
+const noRC = body => body.replace(/^\s*raceclocker:.*$/m, '');
+
 async function setup(ctx, errs, tag) {
   await ctx.route(/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, r => r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE }));
   await ctx.route(/fonts\.googleapis\.com/, r => r.fulfill({ status: 200, contentType: 'text/css', body: fontCss }));
   await ctx.route(/fonts\.gstatic\.com\/local\//, r => {
     const m = r.request().url().match(/local\/([^/]+)\/([^/?]+)/);
     r.fulfill({ status: 200, contentType: 'font/woff2', body: fs.readFileSync(path.join(FS, m[1], 'files', m[2])) });
+  });
+  // The edge function: archive results for edition 03, live results for a race 'abcd1234'.
+  ctx.rc = { calls: [], fail: false, payload: url => (/abcd1234/.test(url) ? RC_LIVE(ctx.rc.calls.filter(u => /abcd1234/.test(u)).length) : RC_ARCHIVE()) };
+  await ctx.route(/\/functions\/v1\/raceclocker/, r => {
+    const url = r.request().url();
+    ctx.rc.calls.push(url);
+    if (ctx.rc.fail) return r.fulfill({ status: 502, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: 'RaceClocker is nu niet bereikbaar' }) });
+    r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(ctx.rc.payload(url)) });
   });
   ctx.on('page', p => {
     p.on('console', m => { if (m.type() === 'error') errs.push(tag + ' console: ' + m.text()); });
@@ -32,7 +86,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await setup(ctx, errs, 'desk');
   await ctx.route(/assets\/config\.js/, async r => {
     const resp = await r.fetch(); let body = await resp.text();
-    body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '2026-01-11'");
+    body = noRC(body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '2026-01-11'"));
     r.fulfill({ response: resp, body });
   });
   const p = await ctx.newPage();
@@ -283,7 +337,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await setup(ctx2, errs, 'cfg');
   await ctx2.route(/assets\/config\.js/, async r => {
     const resp = await r.fetch(); let body = await resp.text();
-    body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '2027-03-14'").replace('signupUrl: null', "signupUrl: 'https://example.com/inschrijven'");
+    body = noRC(body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '2027-03-14'").replace('signupUrl: null', "signupUrl: 'https://example.com/inschrijven'"));
     r.fulfill({ response: resp, body });
   });
   const c = await ctx2.newPage();
@@ -324,9 +378,131 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await e.fill('#p-name', 'Live Test');
   await e.click('#p-btn');
   await e.waitForSelector('#view-account:not([hidden])');
-  check('form cannot pick edition 04 yet', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 03', 'Editie 02', 'Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
-  check('empty list suggests latest raced edition', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 03'), await e.textContent('#entry-list'));
+  check('form offers neither edition 04 (not raced yet) nor 03 (official timing)', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 02', 'Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
+  check('form has no Kids category', !(await e.$$eval('#f-cat option', o => o.map(x => x.value))).includes('kids'));
+  check('empty list suggests the latest edition you can fill in', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 02'), await e.textContent('#entry-list'));
   await ctx3.close();
+
+  // Official timing (RaceClocker): edition 03 from the real config
+  const ctxR = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
+  await setup(ctxR, errs, 'rc');
+  const r = await ctxR.newPage();
+  await r.goto(BASE);
+  await r.waitForSelector('#lb-list .lb-row');
+  await r.addStyleTag({ content: 'html{scroll-behavior:auto!important}' });
+  check('RC: edition 03 shows the official results', (await r.$eval('#lb-event', s => s.value)) === 'sim-03' && (await r.textContent('#lb-list')).includes('Snelle Sander'));
+  check('RC: no stored copy, so the function was asked once for race f4b23f3b', ctxR.rc.calls.length === 1 && /race=f4b23f3b/.test(ctxR.rc.calls[0]), ctxR.rc.calls);
+  const rcRows = await r.$$eval('#lb-list .lb-row', rows => rows.map(x => ({ rk: x.querySelector('.rk').textContent, nm: x.querySelector('.nm').textContent, tm: x.querySelector('.tm').textContent })));
+  check('RC: finishers ranked, tie shares a rank, DNF last, DNS left out', JSON.stringify(rcRows.map(x => x.rk)) === JSON.stringify(['01', '02', '02', '04', '–']) && rcRows[4].tm === 'DNF' && !rcRows.some(x => x.nm === 'Thuisblijver Tom'), rcRows);
+  check('RC: start number, age group and official badge', /Nr\. 101/.test(await r.textContent('#lb-list .lb-row .meta')) && /16-34 jr/.test(await r.textContent('#lb-list .lb-row .meta')) && (await r.textContent('#lb-list .lb-row .badge.ok')).includes('Officiële tijd'));
+  const chips = await r.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  check('RC: categories with counts, Kids only here', chips.length === 7 && chips[0] === 'Single mannen 5' && chips[6] === 'Kids 2', chips);
+  const tiles = await r.textContent('#lb-summary');
+  check('RC: summary with finishers of starters, fastest and average', /Gefinisht\s*4 van 5/.test(tiles) && tiles.includes('1:05:00') && tiles.includes('1:09:10'), tiles.replace(/\s+/g, ' '));
+  check('RC: source links to RaceClocker', (await r.getAttribute('#lb-summary a', 'href')) === 'https://raceclocker.com/f4b23f3b');
+  check('RC: club filter hidden, search by name or number', await r.isHidden('#lb-club') && (await r.getAttribute('#lb-search', 'placeholder')) === 'Naam of startnummer');
+  check('RC: not live, no "on the course" block', await r.isHidden('#lb-live'));
+  await r.click('[data-row="rc-101"]');
+  const full = await r.$$eval('.lb-row.open .sp b', b => b.map(x => x.textContent));
+  check('RC: 16 lap times in the detail, with running and station totals', full.length === 16 && !full.includes('–') && /Lopen 0:3\d:\d\d · stations 0:2\d:\d\d\./.test(await r.textContent('.lb-row.open .sp-sum')), full);
+  await r.click('[data-row="rc-104"]');
+  const gap = await r.$$eval('#sp-rc104 .sp b', b => b.map(x => x.textContent));
+  const gapNote = await r.textContent('#sp-rc104 .sp-sum');
+  check('RC: laps tapped wrong show as – with one combined time', gap.filter(x => x === '–').length === 3 && gapNote.includes('Run 2, Sled push en Run 3 samen') && gapNote.includes('niet elke ronde'.replace('niet', 'Niet')), { gap, gapNote });
+  check('RC: combined part is hatched in the bar', (await r.$$eval('[data-row="rc-104"] .bar i.mx', e => e.length)) === 1);
+  await r.click('[data-row="rc-105"]');
+  check('RC: DNF detail says where it stopped', (await r.textContent('#sp-rc105 .sp-sum')).includes('Gestopt na Sled push, 4 van 16 onderdelen'), await r.textContent('#sp-rc105 .sp-sum'));
+  await r.click('[data-row="rc-101"]');
+  await r.$eval('#lb-summary', e => e.scrollIntoView());
+  await r.screenshot({ path: 'site-rc-lb.png' });
+  await r.fill('#lb-search', '103');
+  check('RC: search by start number', (await r.$$eval('#lb-list .lb-row', e => e.length)) === 1 && (await r.textContent('#lb-list .nm')) === 'Gelijke Gert');
+  await r.fill('#lb-search', '');
+  await r.click('[data-cat="doubles_women"]');
+  await r.waitForSelector('[data-row="rc-201"]');
+  check('RC: penalty shown as a badge', (await r.textContent('[data-row="rc-201"] .badge.warn')) === '+4:00 straftijd');
+  await r.click('[data-row="rc-201"]');
+  check('RC: penalty reason in the detail', (await r.textContent('#sp-rc201 .sp-sum')).includes('Straftijd 4:00: 2 banen lunges te weinig.'), await r.textContent('#sp-rc201 .sp-sum'));
+  await r.click('[data-cat="relay"]');
+  await r.click('[data-row="rc-301"]');
+  check('RC: relay lists the team without guessing who ran what', (await r.textContent('#sp-rc301 .team-names')) === 'Team: Piet Een, Jan Twee, Kees Drie en Klaas Vier' && (await r.$$eval('#sp-rc301 .member', e => e.length)) === 0);
+  await r.click('[data-cat="kids"]');
+  await r.click('[data-row="rc-401"]');
+  check('RC: kids show the total only', (await r.textContent('#sp-rc401 .sp-sum')) === 'Bij de kids telt alleen de eindtijd.' && (await r.textContent('[data-row="rc-401"] .tm')) === '0:19:10');
+  check('RC: only the category switch, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
+  await r.selectOption('#lb-event', 'sim-02');
+  await r.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
+  const chips2 = await r.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.trim()));
+  check('RC: other edition back to self-reported: club filter, no counts, no Kids', await r.isVisible('#lb-club') && chips2.length === 6 && chips2[0] === 'Single mannen' && (await r.$eval('#lb-cats [aria-pressed="true"]', x => x.dataset.cat)) === 'single_men', chips2);
+  await r.selectOption('#lb-event', 'sim-03');
+  await r.waitForSelector('[data-row="rc-101"]');
+  check('RC: back to edition 03 from memory, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
+  await ctxR.close();
+
+  // A fresh stored copy is used as is; a stale one is refreshed; if that fails the stored copy stays.
+  const ctxS = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
+  await setup(ctxS, errs, 'rcfail');
+  const fresh = RC_ARCHIVE();
+  await ctxS.addInitScript(rows => { window.__rcCache = rows; }, [{ race_id: 'f4b23f3b', event_id: 'sim-03', fetched_at: new Date().toISOString(), payload: fresh }]);
+  const s1 = await ctxS.newPage();
+  await s1.goto(BASE);
+  await s1.waitForSelector('[data-row="rc-101"]');
+  check('RC cache: fresh stored copy used without calling the function', ctxS.rc.calls.length === 0, ctxS.rc.calls);
+  await s1.close();
+  const old = Object.assign(RC_ARCHIVE(), { fetched_at: new Date(Date.now() - 2 * 3600e3).toISOString() });
+  old.entries[0].name = 'Oude Opslag';
+  await ctxS.addInitScript(rows => { window.__rcCache = rows; }, [{ race_id: 'f4b23f3b', event_id: 'sim-03', fetched_at: old.fetched_at, payload: old }]);
+  const s2 = await ctxS.newPage();
+  await s2.goto(BASE);
+  await s2.waitForSelector('[data-row="rc-101"]');
+  check('RC cache: stored copy older than an hour is fetched again', ctxS.rc.calls.length === 1 && (await s2.textContent('[data-row="rc-101"] .nm')) === 'Snelle Sander', ctxS.rc.calls.length);
+  await s2.close();
+  ctxS.rc.fail = true;
+  const s3 = await ctxS.newPage();
+  await s3.goto(BASE);
+  await s3.waitForSelector('[data-row="rc-101"]');
+  check('RC cache: function down, the stored copy is still shown', (await s3.textContent('[data-row="rc-101"] .nm')) === 'Oude Opslag');
+  await ctxS.close();
+
+  // Race day of edition 04 with official timing: live
+  const ctxL = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
+  await setup(ctxL, errs, 'rclive');
+  await ctxL.route(/assets\/config\.js/, async rt => {
+    const resp = await rt.fetch(); let body = await resp.text();
+    body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '" + new Date(Date.now() - 60e3).toISOString() + "'")
+      .replace("raceclocker: { 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
+    rt.fulfill({ response: resp, body });
+  });
+  const L = await ctxL.newPage();
+  await L.goto(BASE);
+  await L.waitForSelector('#lb-live .lb-row');
+  check('live: edition 04 is the default on race day', (await L.$eval('#lb-event', s => s.value)) === 'sim-04');
+  const onCourse = await L.$$eval('#lb-live .lb-row', rows => rows.map(x => ({ nm: x.querySelector('.nm').textContent, rk: x.querySelector('.rk').textContent, now: x.querySelector('.badge.live').textContent })));
+  check('live: athletes on the course, furthest first, with the part they are doing', onCourse.length === 2 && onCourse[0].nm === 'Rennende Ruud' && onCourse[0].rk === '9/16' && onCourse[0].now === 'Nu Roeien' && onCourse[1].now === 'Nu Run 4', onCourse);
+  const liveTiles = (await L.textContent('#lb-summary')).replace(/\s+/g, ' ');
+  check('live: summary with on course, still to start and last update', /Gefinisht\s*2 van 4/.test(liveTiles) && /Onderweg\s*2 nog 1 te starten/.test(liveTiles) && /Live\s*Bijgewerkt \d+ s geleden/.test(liveTiles), liveTiles);
+  const clock1 = await L.textContent('#lb-live .lb-row .tm');
+  await wait(L, 1300);
+  const clock2 = await L.textContent('#lb-live .lb-row .tm');
+  check('live: race clock of an athlete on the course keeps running', /^0:4\d:\d\d$/.test(clock1) && clock1 !== clock2, [clock1, clock2]);
+  check('live: hero says the edition is on, with a link', (await L.textContent('#countdown-tbd')) === 'Editie 04 is bezig · volg de uitslag live' && (await L.getAttribute('#countdown-tbd a', 'href')) === '#leaderboard');
+  await L.waitForFunction(() => document.querySelectorAll('#lb-list .lb-row').length === 3, null, { timeout: 6000 });
+  check('live: after the next update the finisher moves to the results and lights up', (await L.$$eval('#lb-live .lb-row', e => e.length)) === 1 && (await L.$eval('[data-row="rc-503"]', x => x.closest('.lb-row').classList.contains('flash'))) && (await L.textContent('[data-row="rc-503"] .rk')) === '03');
+  await wait(L, 450);
+  check('live: screen reader hears who came in', (await L.textContent('#lb-status')).startsWith('Binnen: Rennende Ruud, plek 3 in 1:01:40'), await L.textContent('#lb-status'));
+  await L.click('[data-row="rc-504"]');
+  await wait(L, 1800);
+  check('live: an open row stays open through updates', await L.isVisible('#sp-rc504') && (await L.getAttribute('[data-row="rc-504"]', 'aria-expanded')) === 'true');
+  const sw3 = await L.evaluate(() => document.documentElement.scrollWidth);
+  check('live: no horizontal scroll', sw3 <= 1280, sw3);
+  await L.$eval('#leaderboard', e => e.scrollIntoView());
+  await L.screenshot({ path: 'site-live-lb.png' });
+  await L.selectOption('#lb-event', 'sim-02');
+  await L.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
+  const n1 = ctxL.rc.calls.length;
+  await wait(L, 3200);
+  check('live: no more requests after switching to an edition without timing', ctxL.rc.calls.length === n1 && await L.isHidden('#lb-live'), [n1, ctxL.rc.calls.length]);
+  await ctxL.close();
 
   // Mobile
   for (const w of [390, 360]) {
@@ -362,7 +538,8 @@ const wait = (p, ms) => p.waitForTimeout(ms);
     await m.close();
   }
 
-  const relevant = errs.filter(e => !/favicon/.test(e));
+  // rcfail: the function answers 502 on purpose, the browser logs that.
+  const relevant = errs.filter(e => !/favicon/.test(e) && !/^rcfail /.test(e));
   check('no console or page errors', relevant.length === 0, relevant);
   console.log(failures ? failures + ' FAILED' : 'ALL PASSED');
   await b.close();

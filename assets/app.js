@@ -19,7 +19,9 @@
     { id: 'doubles_mixed', label: 'Mixed dubbel', duo: true },
     { id: 'doubles_men', label: 'Mannen dubbel', duo: true },
     { id: 'doubles_women', label: 'Vrouwen dubbel', duo: true },
-    { id: 'relay', label: 'Relay', team: true }
+    { id: 'relay', label: 'Relay', team: true },
+    // Only in the official timing (RaceClocker), not in the form.
+    { id: 'kids', label: 'Kids', rcOnly: true }
   ];
   var CAT = {};
   CATS.forEach(function (c) { CAT[c.id] = c; });
@@ -53,6 +55,7 @@
   var api = {
     events: function () { return sb.from('events').select('*').order('sort_order', { ascending: true }); },
     board: function (ev, cat) { return sb.from('leaderboard').select('*').eq('event_id', ev).eq('category', cat).order('total_seconds', { ascending: true }); },
+    rcCache: function (race) { return sb.from('raceclocker_cache').select('fetched_at,payload').eq('race_id', race).maybeSingle(); },
     profile: function (uid) { return sb.from('profiles').select('*').eq('id', uid).maybeSingle(); },
     saveProfile: function (row) { return sb.from('profiles').upsert(row).select().single(); },
     mine: function (uid) { return sb.from('results').select('*').eq('user_id', uid).order('created_at', { ascending: false }); },
@@ -86,7 +89,7 @@
 
   /* ---------- State ---------- */
   var state = { events: [], session: null, profile: null, mine: [] };
-  var lb = { src: 'sim', ev: null, cat: 'single_men', club: '', q: '', div: '', open: {}, flash: null, rows: [], loading: true, error: null, req: 0 };
+  var lb = { src: 'sim', ev: null, cat: 'single_men', club: '', q: '', div: '', open: {}, flash: null, rows: [], loading: true, error: null, req: 0, picked: false };
 
   function uid() { return state.session && state.session.user ? state.session.user.id : null; }
   function loggedIn() { return !!(uid() && state.profile); }
@@ -119,16 +122,21 @@
     else if (c.duo && d.partner_name) { names = d.athlete + ' & ' + d.partner_name; }
     return { id: d.id, names: names, members: members, club: d.club || 'Gast', total: d.total_seconds, verified: d.status === 'verified', division: d.division, splits: d.splits && d.splits.length === 16 ? d.splits : null, mine: !!uid() && d.user_id === uid() };
   }
-  function ranked(rows) {
-    var list = rows.map(toRow);
+  function rankRows(list) {
     list.sort(function (a, b) { return a.total - b.total; });
     var rank = 0, prev = -1;
     list.forEach(function (r, i) { if (r.total !== prev) { rank = i + 1; prev = r.total; } r.rank = rank; });
     return list;
   }
+  function ranked(rows) { return rankRows(rows.map(toRow)); }
 
   function loadBoard() {
+    clearTimeout(rc.timer); rc.wait = false;
+    if (CAT[lb.cat].rcOnly && !rcRace(lb.ev)) lb.cat = 'single_men';
     if (!sb || !lb.ev) { lb.loading = false; lb.rows = []; renderLB(); return Promise.resolve(); }
+    var race = rcRace(lb.ev);
+    if (race) return loadRC(race);
+    rcTicker(false);
     var token = ++lb.req;
     lb.loading = true; lb.error = null; renderLB();
     return api.board(lb.ev, lb.cat).then(function (res) {
@@ -140,6 +148,227 @@
       if (token !== lb.req) return;
       lb.loading = false; lb.error = nlError(err); lb.rows = []; renderLB();
     });
+  }
+
+  /* ---------- Official timing: RaceClocker ---------- */
+  // Editions in config.raceclocker show the RaceClocker results instead of self-reported times.
+  // The edge function "raceclocker" fetches them and keeps the latest version in the table
+  // raceclocker_cache. The page reads that table and only asks the function for a fresh copy
+  // when the stored one is too old: after 20 seconds on race day, after an hour otherwise. So a
+  // hall full of phones on race day does not make the function call RaceClocker for each phone.
+  var RC = CFG.raceclocker || {};
+  var RC_POLL = CFG.rcPollMs || 20000, RC_KEEP = 3600000;
+  var rc = { data: {}, seen: {}, known: {}, fresh: {}, timer: null, tick: null, wait: false, jitter: Math.round(Math.random() * RC_POLL / 4) };
+  function rcRace(ev) { return ev && RC[ev] ? String(RC[ev]).toLowerCase() : null; }
+  function rcNow() { var r = rcRace(lb.ev); return r && rc.data[r] ? rc.data[r].p : null; }
+  var amsDay = (function () {
+    try {
+      var f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' });
+      return function (ms) { return f.format(new Date(ms)); };
+    } catch (e) {
+      return function (ms) { var d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    }
+  })();
+  // Race day is today: the results change while you look.
+  function rcLive(p) { return !!(p && p.date && p.date === amsDay(Date.now())); }
+  function rcMaxAge(p) { return rcLive(p) ? RC_POLL + rc.jitter : RC_KEEP; }
+  function rcStale(race, row) {
+    var seen = rc.seen[race], now = Date.now();
+    if (!seen || seen.at !== row.fetched_at) seen = rc.seen[race] = { at: row.fetched_at, since: now };
+    var max = rcMaxAge(row.payload);
+    // By the clock of this device, and by how long this page has seen the same version,
+    // in case that clock is off.
+    return now - Date.parse(row.fetched_at) > max || now - seen.since > max;
+  }
+  function rcCall(race) {
+    return fetch(CFG.supabaseUrl + '/functions/v1/raceclocker?race=' + encodeURIComponent(race), { headers: { Accept: 'application/json' } }).then(function (r) {
+      return r.json().then(function (p) {
+        if (!r.ok || !p || !Array.isArray(p.entries)) throw new Error((p && p.error) || 'HTTP ' + r.status);
+        return p;
+      });
+    });
+  }
+  function rcFetch(race) {
+    return api.rcCache(race).then(function (res) {
+      var row = res && !res.error && res.data && res.data.payload && Array.isArray(res.data.payload.entries) ? res.data : null;
+      if (row && !rcStale(race, row)) return row.payload;
+      return rcCall(race).then(null, function (err) { if (row) return row.payload; throw err; });
+    }, function () { return rcCall(race); });
+  }
+  function loadRC(race) {
+    var token = ++lb.req, have = rc.data[race];
+    lb.error = null; lb.rows = []; lb.loading = !have;
+    renderLB();
+    if (have && Date.now() - have.at < rcMaxAge(have.p)) { rcSchedule(); return Promise.resolve(); }
+    return rcFetch(race).then(function (p) {
+      rc.data[race] = { p: p, at: Date.now() };
+      if (token !== lb.req) return;
+      lb.loading = false; renderLB(!!have); rcSchedule();
+    }, function (err) {
+      if (window.console) console.warn('RaceClocker', err);
+      if (token !== lb.req) return;
+      lb.loading = false;
+      if (!have) lb.error = 'De uitslag van de tijdwaarneming kon niet laden. Probeer het zo opnieuw.';
+      renderLB(); rcSchedule();
+    });
+  }
+  // On race day: fetch again every 20 seconds while the page is in view.
+  function rcSchedule() {
+    clearTimeout(rc.timer); rc.timer = null; rc.wait = false;
+    var live = rcLive(rcNow());
+    rcTicker(live);
+    if (!live) return;
+    var race = rcRace(lb.ev);
+    rc.timer = setTimeout(function () {
+      if (document.hidden) { rc.wait = true; return; }
+      rcRefresh(race);
+    }, RC_POLL);
+  }
+  function rcRefresh(race) {
+    rcFetch(race).then(function (p) {
+      rc.data[race] = { p: p, at: Date.now() };
+      if (rcRace(lb.ev) !== race || lb.loading) return;
+      lb.error = null; renderLB(true); rcSchedule();
+    }, function () { if (rcRace(lb.ev) === race) rcSchedule(); });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || !rc.wait) return;
+    rc.wait = false;
+    var race = rcRace(lb.ev);
+    if (race) rcRefresh(race);
+  });
+  // Running clocks and "updated 12 s ago" between two fetches.
+  function ago(ms) { var s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? s + ' s geleden' : Math.floor(s / 60) + ' min geleden'; }
+  function since(ms) { return fmt(Math.max(0, Math.floor((Date.now() - ms) / 1000))); }
+  function rcTicker(on) {
+    if (!on) { clearInterval(rc.tick); rc.tick = null; return; }
+    if (rc.tick) return;
+    rc.tick = setInterval(function () {
+      if (document.hidden) return;
+      $$('[data-since]').forEach(function (el) { el.textContent = since(Number(el.dataset.since)); });
+      $$('[data-ago]').forEach(function (el) { el.textContent = ago(Date.now() - Date.parse(el.dataset.ago)); });
+    }, 1000);
+  }
+  function rcRows(p, cat) {
+    var n = {}, c = CAT[cat] || {};
+    return (p.entries || []).filter(function (e) { return e.cat === cat; }).map(function (e) {
+      var id = 'rc-' + e.bib;
+      n[id] = (n[id] || 0) + 1;
+      if (n[id] > 1) id += '-' + n[id];
+      return {
+        id: id, e: e, names: e.name || 'Onbekend', bib: e.bib,
+        members: c.team && e.names && e.names.length > 1 ? e.names : null,
+        total: e.total, status: e.status, laps: e.laps || 0,
+        splits: Array.isArray(e.splits) ? e.splits : null, merged: e.merged || [], penalty: e.penalty || 0, note: e.penalty_note || ''
+      };
+    });
+  }
+  function nameList(a) { return a.length > 1 ? a.slice(0, -1).join(', ') + ' en ' + a[a.length - 1] : a.join(''); }
+  function segList(from, to) { return to - from > 2 ? SEG[from] + ' t/m ' + SEG[to] : nameList(SEG.slice(from, to + 1)); }
+  function rcBar(r) {
+    if (!r.splits || r.status !== 'finished') return '<span class="bar bar-empty" aria-hidden="true"></span>';
+    var out = [], i = 0;
+    while (i < r.splits.length) {
+      if (r.splits[i] != null) { out.push('<i class="' + (i % 2 ? 'st' : 'rn') + '" style="flex:' + Number(r.splits[i]) + ' 1 0"></i>'); i++; continue; }
+      var m = r.merged.filter(function (x) { return x.from === i; })[0];
+      if (m) { out.push('<i class="mx" style="flex:' + Number(m.s) + ' 1 0"></i>'); i = Number(m.to) + 1; } else i++;
+    }
+    return '<span class="bar" aria-hidden="true">' + out.join('') + '</span>';
+  }
+  function rcRowHTML(r, kind) {
+    var open = !!lb.open[r.id], sid = 'sp-' + r.id.replace(/[^a-z0-9]/gi, '');
+    var meta = ['<span>Nr. ' + esc(r.bib) + '</span>'];
+    if (r.e.age) meta.push('<span>' + esc(r.e.age) + ' jr</span>');
+    var rk, tm, bar;
+    if (kind === 'fin') {
+      rk = '<span class="' + (r.rank === 1 ? 'rk top1' : r.rank <= 3 ? 'rk top' : 'rk') + '">' + String(r.rank).padStart(2, '0') + '</span>';
+      tm = '<span class="tm">' + fmt(r.total) + '</span>';
+      meta.push('<span class="badge ok">' + ICON_CHECK + 'Officiële tijd</span>');
+      if (r.penalty) meta.push('<span class="badge warn">+' + mmss(r.penalty) + ' straftijd</span>');
+      bar = rcBar(r);
+    } else if (kind === 'run') {
+      rk = '<span class="rk rk-sm" title="' + r.laps + ' van 16 onderdelen klaar">' + r.laps + '<small>/16</small></span>';
+      tm = '<span class="tm" data-since="' + Number(r.e.start) + '">' + since(Number(r.e.start)) + '</span>';
+      meta.push('<span class="badge live">Nu ' + esc(SEG[Math.min(r.laps, 15)]) + '</span>');
+      bar = '<span class="bar bar-prog" aria-hidden="true"><i style="width:' + Math.round(r.laps / 16 * 100) + '%"></i></span>';
+    } else {
+      rk = '<span class="rk rk-sm">–</span>';
+      tm = '<span class="tm tm-dnf">DNF</span>';
+      meta.push('<span class="badge">Niet gefinisht</span>');
+      bar = '<span class="bar bar-empty" aria-hidden="true"></span>';
+    }
+    return '<li class="lb-row' + (open ? ' open' : '') + (rc.fresh[r.id] ? ' flash' : '') + '">' +
+      '<button type="button" class="lb-main" data-row="' + esc(r.id) + '" aria-expanded="' + open + '" aria-controls="' + sid + '">' +
+      rk + '<span class="who"><span class="nm">' + esc(r.names) + '</span><span class="meta">' + meta.join('') + '</span></span>' + bar + tm +
+      '<span class="chev" aria-hidden="true">' + ICON_CHEV + '</span></button>' +
+      '<div class="lb-detail" id="' + sid + '"' + (open ? '' : ' hidden') + '>' + rcDetailHTML(r, kind) + '</div></li>';
+  }
+  function rcDetailHTML(r, kind) {
+    var out = r.members ? '<p class="sp-sum team-names">Team: ' + esc(nameList(r.members)) + '</p>' : '';
+    if (!r.splits) {
+      var why = kind === 'run' ? 'Gestart, nog geen onderdeel klaar.' : r.e.cat === 'kids' ? 'Bij de kids telt alleen de eindtijd.' : 'Van deze deelnemer zijn geen rondetijden bekend.';
+      return out + '<p class="sp-sum">' + why + '</p>';
+    }
+    out += '<div class="splits">' + r.splits.map(function (s, i) {
+      return '<div class="sp ' + (i % 2 ? 'st' : 'rn') + (s == null ? ' unk' : '') + '"><span>' + SEG[i] + '</span><b>' + (s == null ? '–' : mmss(s)) + '</b></div>';
+    }).join('') + '</div>';
+    var notes = [], complete = r.splits.every(function (s) { return s != null; });
+    if (kind === 'fin' && complete && r.splits.length === 16) {
+      var run = 0, st = 0;
+      r.splits.forEach(function (s, i) { if (i % 2) st += s; else run += s; });
+      notes.push('Lopen ' + fmt(run) + ' · stations ' + fmt(st) + '.');
+    }
+    r.merged.forEach(function (m) { notes.push(segList(m.from, m.to) + ' samen ' + mmss(m.s) + '.'); });
+    if (!complete) notes.push('Niet elke ronde is goed getikt, daarom staan die onderdelen samen.');
+    if (r.penalty) notes.push('Straftijd ' + mmss(r.penalty) + (r.note ? ': ' + r.note : '') + '.');
+    if (kind === 'dnf') notes.push('Gestopt na ' + SEG[Math.max(r.laps, 1) - 1] + ', ' + r.laps + ' van 16 onderdelen.');
+    if (kind === 'run') notes.push('Nu bezig met ' + SEG[Math.min(r.laps, 15)] + '.');
+    return out + (notes.length ? '<p class="sp-sum">' + esc(notes.join(' ')) + '</p>' : '');
+  }
+  function renderRC(p, quiet) {
+    var race = rcRace(lb.ev), cat = lb.cat, rows = rcRows(p, cat), live = rcLive(p);
+    var q = lb.q.trim().toLowerCase();
+    var hit = function (r) { return !q || (r.names + ' ' + r.bib).toLowerCase().indexOf(q) >= 0; };
+    var fin = rankRows(rows.filter(function (r) { return r.status === 'finished' && r.total > 0; }));
+    var run = rows.filter(function (r) { return r.status === 'running'; }).sort(function (a, b) { return b.laps - a.laps || (a.e.last || a.e.start || 0) - (b.e.last || b.e.start || 0); });
+    var dnf = rows.filter(function (r) { return r.status === 'dnf'; }).sort(function (a, b) { return b.laps - a.laps; });
+    var waiting = rows.filter(function (r) { return r.status === 'waiting'; }).length;
+    // Finishers that came in since the last update light up once.
+    var key = race + ':' + cat, known = rc.known[key];
+    rc.fresh = {};
+    if (quiet && known) fin.forEach(function (r) { if (!known[r.id]) rc.fresh[r.id] = 1; });
+    rc.known[key] = {};
+    fin.forEach(function (r) { rc.known[key][r.id] = 1; });
+
+    var started = fin.length + run.length + dnf.length;
+    var avg = fin.length ? Math.round(fin.reduce(function (a, r) { return a + r.total; }, 0) / fin.length) : 0;
+    var tiles = '<div><span class="k">Gefinisht</span><span class="v">' + fin.length + (started > fin.length ? ' <small>van ' + started + '</small>' : '') + '</span></div>';
+    if (live) tiles += '<div><span class="k">Onderweg</span><span class="v">' + run.length + (waiting ? ' <small>nog ' + waiting + ' te starten</small>' : '') + '</span></div>';
+    tiles += '<div><span class="k">Snelste tijd</span><span class="v">' + (fin[0] ? fmt(fin[0].total) : '–') + '</span></div>';
+    if (!live) tiles += '<div><span class="k">Gemiddeld</span><span class="v">' + (avg ? fmt(avg) : '–') + '</span></div>';
+    tiles += live
+      ? '<div class="is-live"><span class="k"><i class="live-dot" aria-hidden="true"></i>Live</span><span class="v v-sm">Bijgewerkt <span data-ago="' + esc(p.fetched_at) + '">' + ago(Date.now() - Date.parse(p.fetched_at)) + '</span></span></div>'
+      : '<div><span class="k">Tijdwaarneming</span><span class="v v-sm"><a href="https://raceclocker.com/' + esc(race) + '" target="_blank" rel="noopener">RaceClocker</a></span></div>';
+    $('#lb-summary').innerHTML = tiles;
+
+    var box = $('#lb-live'), runHit = run.filter(hit);
+    box.hidden = !(live && run.length);
+    box.innerHTML = live && run.length
+      ? '<h3 class="lb-sub"><i class="live-dot" aria-hidden="true"></i>Nu op het parcours <small>' + run.length + '</small></h3>' +
+        '<ol class="lb-list" aria-label="Nu op het parcours">' + (runHit.length ? runHit.map(function (r) { return rcRowHTML(r, 'run'); }).join('') : '<li class="lb-empty">Niemand onderweg met deze naam of dit nummer.</li>') + '</ol>'
+      : '';
+
+    var finHit = fin.filter(hit), dnfHit = dnf.filter(hit), list = $('#lb-list');
+    if (!fin.length && !dnf.length) {
+      list.innerHTML = '<li class="lb-empty">' + (!live ? 'Geen uitslagen in deze categorie.' : run.length ? 'Nog niemand binnen in deze categorie.' : waiting ? 'Deze categorie is nog niet gestart.' : 'Geen deelnemers in deze categorie.') + '</li>';
+    } else if (!finHit.length && !dnfHit.length) {
+      list.innerHTML = '<li class="lb-empty">Geen uitslag met deze naam of dit nummer. <button type="button" class="linkbtn" id="lb-reset">Wis zoekopdracht</button></li>';
+    } else {
+      list.innerHTML = finHit.map(function (r) { return rcRowHTML(r, 'fin'); }).join('') + dnfHit.map(function (r) { return rcRowHTML(r, 'dnf'); }).join('');
+    }
+    var arrived = fin.filter(function (r) { return rc.fresh[r.id]; });
+    if (!quiet) announce(finHit.length === 1 ? '1 uitslag getoond.' : finHit.length + ' uitslagen getoond.');
+    else if (arrived.length) announce('Binnen: ' + arrived.map(function (r) { return r.names + ', plek ' + r.rank + ' in ' + fmt(r.total); }).join('; ') + '.');
   }
 
   function rowHTML(r) {
@@ -190,7 +419,18 @@
       : '<option value="">Nog geen events</option>';
     $('#ctrl-div').hidden = lb.src !== 'off';
     $$('#lb-div button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.div === lb.div)); });
-    $('#lb-cats').innerHTML = CATS.map(function (c) { return '<button type="button" class="chip" data-cat="' + c.id + '" aria-pressed="' + (c.id === lb.cat) + '">' + c.label + '</button>'; }).join('');
+    // Official timing: a count per category, plus Kids when they raced.
+    var race = rcRace(lb.ev), p = rcNow(), cnt = {}, has = {};
+    if (p) p.entries.forEach(function (x) {
+      if (!x.cat || x.status === 'dns') return;
+      has[x.cat] = true;
+      if (x.status !== 'waiting') cnt[x.cat] = (cnt[x.cat] || 0) + 1;
+    });
+    var cats = CATS.filter(function (c) { return !c.rcOnly || has[c.id]; });
+    if (!cats.some(function (c) { return c.id === lb.cat; })) lb.cat = 'single_men';
+    $('#lb-cats').innerHTML = cats.map(function (c) { return '<button type="button" class="chip" data-cat="' + c.id + '" aria-pressed="' + (c.id === lb.cat) + '">' + c.label + (p ? ' <span class="cnt">' + (cnt[c.id] || 0) + '</span>' : '') + '</button>'; }).join('');
+    $('#lb-club').parentNode.hidden = !!race;
+    $('#lb-search').placeholder = race ? 'Naam of startnummer' : 'Bijvoorbeeld Sanne';
     if (refocus) { var f = $(refocus); if (f) f.focus(); }
     $('#lb-eyebrow').textContent = (lb.src === 'sim' ? 'Sim Roelofarendsveen · ' : '') + (lb.ev ? eventLabel(lb.ev) + ' · ' : '') + CAT[lb.cat].label;
   }
@@ -200,9 +440,11 @@
     clearTimeout(statusT);
     statusT = setTimeout(function () { $('#lb-status').textContent = msg; }, 350);
   }
-  function renderLB() {
+  function renderLB(quiet) {
+    var act = document.activeElement, fid = act && act.dataset ? act.dataset.row : null;
     renderControls();
-    var list = $('#lb-list');
+    var list = $('#lb-list'), box = $('#lb-live');
+    box.hidden = true; box.innerHTML = '';
     if (lb.loading) {
       $('#lb-summary').innerHTML = '';
       list.innerHTML = '<li class="lb-loading">Leaderboard laden…</li>';
@@ -212,6 +454,12 @@
       $('#lb-summary').innerHTML = '';
       list.innerHTML = '<li class="lb-error">' + esc(lb.error) + ' <button type="button" class="linkbtn" id="lb-retry">Opnieuw laden</button></li>';
       announce(lb.error);
+      return;
+    }
+    var rcp = rcNow();
+    if (rcRace(lb.ev) && rcp) {
+      renderRC(rcp, quiet);
+      if (fid) { var back = document.querySelector('[data-row="' + fid + '"]'); if (back && back !== act) back.focus({ preventScroll: true }); }
       return;
     }
     var all = ranked(lb.rows);
@@ -261,7 +509,7 @@
       det.hidden = !open;
       return;
     }
-    if (t.closest('#lb-reset')) { lb.club = ''; lb.q = ''; lb.div = ''; $('#lb-club').value = ''; $('#lb-search').value = ''; renderLB(); return; }
+    if (t.closest('#lb-reset')) { lb.club = ''; lb.q = ''; lb.div = ''; $('#lb-club').value = ''; $('#lb-search').value = ''; renderLB(); $('#lb-search').focus(); return; }
     if (t.closest('#lb-retry')) { loadBoard(); return; }
     if (t.closest('[data-open-login]')) { e.preventDefault(); goMine(); return; }
     if (t.closest('[data-signup]')) {
@@ -274,7 +522,7 @@
     if ((el = t.closest('[data-del-yes]'))) { removeEntry(el.dataset.delYes, el); return; }
     if ((el = t.closest('[data-view]'))) { viewOnBoard(el.dataset.view); return; }
   });
-  $('#lb-event').addEventListener('change', function (e) { lb.ev = e.target.value; lb.open = {}; loadBoard(); });
+  $('#lb-event').addEventListener('change', function (e) { lb.ev = e.target.value; lb.open = {}; lb.picked = true; loadBoard(); });
   $('#lb-club').addEventListener('change', function (e) { lb.club = e.target.value; renderLB(); });
   $('#lb-search').addEventListener('input', function (e) { lb.q = e.target.value; renderLB(); });
 
@@ -403,10 +651,12 @@
   /* ---------- Mijn tijden ---------- */
   var editing = null, confirmDel = null;
   function formSrc() { return $('#f-src-off').checked ? 'off' : 'sim'; }
-  $('#f-cat').innerHTML = CATS.map(function (c) { return '<option value="' + c.id + '">' + c.label + '</option>'; }).join('');
+  $('#f-cat').innerHTML = CATS.filter(function (c) { return !c.rcOnly; }).map(function (c) { return '<option value="' + c.id + '">' + c.label + '</option>'; }).join('');
+  // Editions with official timing are on the leaderboard by themselves.
+  function enterable(e) { return e.accepts_entries && !rcRace(e.id); }
   function syncForm() {
     var src = formSrc(), sel = $('#f-event'), cur = sel.value;
-    var evs = eventsOf(src).filter(function (e) { return e.accepts_entries || e.id === cur; });
+    var evs = eventsOf(src).filter(function (e) { return enterable(e) || e.id === cur; });
     sel.innerHTML = evs.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name) + '</option>'; }).join('');
     if (evs.some(function (e) { return e.id === cur; })) sel.value = cur;
     $('#fw-div').hidden = src !== 'off';
@@ -531,7 +781,7 @@
       '<div><span class="k">Snelste officieel</span><span class="v">' + best(es.filter(function (e) { return srcOfEvent(e.event_id) === 'off'; })) + '</span></div>';
     $('#entry-list').innerHTML = es.length
       ? es.map(entryHTML).join('')
-      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in' + (eventsOf('sim')[0] ? ', bijvoorbeeld van ' + esc(eventsOf('sim')[0].name.toLowerCase()) : '') + '. Die staat daarna meteen op het leaderboard.</li>';
+      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in' + (eventsOf('sim').filter(enterable)[0] ? ', bijvoorbeeld van ' + esc(eventsOf('sim').filter(enterable)[0].name.toLowerCase()) : '') + '. Die staat daarna meteen op het leaderboard.</li>';
   }
 
   /* ---------- Routing ---------- */
@@ -556,6 +806,15 @@
   var DAYS = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
   var FULLDAYS = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
   function dmy(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear(); }
+  var cdTimer = null;
+  // The start of the coming edition passed while the page was open.
+  function raceStarted() {
+    if (!state.events.length) return;
+    var evs = eventsOf(lb.src);
+    if (lb.src === 'sim' && !lb.picked && evs[0] && evs[0].id !== lb.ev) { lb.ev = evs[0].id; lb.open = {}; loadBoard(); }
+    else renderControls();
+    syncForm();
+  }
   function renderStatic() {
     var num = NE_NUM, start = NE_START;
     var dateTxt = start ? DAYS[start.getDay()] + ' ' + start.getDate() + ' ' + MONTHS[start.getMonth()] + ' ' + start.getFullYear() : 'datum volgt';
@@ -591,11 +850,19 @@
         $('#cd-d').textContent = days; $('#cd-h').textContent = String(h).padStart(2, '0');
         $('#cd-m').textContent = String(m).padStart(2, '0'); $('#cd-s').textContent = String(s).padStart(2, '0');
       };
-      tick(); setInterval(tick, 1000);
+      clearInterval(cdTimer);
+      tick(); cdTimer = setInterval(function () {
+        if (start.getTime() <= Date.now()) { clearInterval(cdTimer); renderStatic(); raceStarted(); return; }
+        tick();
+      }, 1000);
     } else {
       $('#countdown').hidden = true; $('#countdown-tbd').hidden = false;
       var left = future ? Math.ceil((start.getTime() - Date.now()) / 864e5) : 0;
-      $('#countdown-tbd').textContent = 'Editie ' + num + ' · ' + (!start ? 'datum volgt' : longDate + (future ? ' · nog ' + left + (left === 1 ? ' dag' : ' dagen') : ''));
+      if (!future && start && rcRace(NE.eventId) && amsDay(Date.now()) === amsDay(start.getTime())) {
+        $('#countdown-tbd').innerHTML = 'Editie ' + esc(num) + ' is bezig · <a href="#leaderboard">volg de uitslag live</a>';
+      } else {
+        $('#countdown-tbd').textContent = 'Editie ' + num + ' · ' + (!start ? 'datum volgt' : longDate + (future ? ' · nog ' + left + (left === 1 ? ' dag' : ' dagen') : ''));
+      }
     }
   }
 

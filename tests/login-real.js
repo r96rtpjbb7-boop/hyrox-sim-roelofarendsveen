@@ -3,6 +3,7 @@
 // A: requesting a login mail sends this page as redirect_to (not the bare github.io domain).
 // B: the link from the mail lands on the site with the session in the hash -> logged in, name step, profile saved with that token.
 // C: an expired link shows a toast and cleans the address bar.
+// D: official results (RaceClocker): the stored copy is read through the REST API, the edge function only when needed.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -16,6 +17,12 @@ const b64url = o => Buffer.from(JSON.stringify(o)).toString('base64url');
 const exp = Math.floor(Date.now() / 1000) + 3600;
 const USER = { id: '11111111-2222-3333-4444-555555555555', aud: 'authenticated', role: 'authenticated', email: 'hans@example.com', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() };
 const JWT = b64url({ alg: 'HS256', typ: 'JWT' }) + '.' + b64url({ sub: USER.id, aud: 'authenticated', role: 'authenticated', email: USER.email, exp, iat: exp - 3600, session_id: 'sess-1' }) + '.c2ln';
+// What the edge function "raceclocker" returns for edition 03, cut down to one finisher.
+const RC_PAYLOAD = () => ({
+  v: 3, race: 'f4b23f3b', event: 'sim-03', date: '2026-10-18', live: false, fetched_at: new Date().toISOString(),
+  entries: [{ bib: '101', name: 'Snelle Sander', names: ['Snelle Sander'], cat: 'single_men', cat_raw: 'Single Men', age: '16-34', wave: '1 08:00', status: 'finished', laps: 16, total: 3900, splits: [240, 240, 250, 240, 250, 240, 250, 240, 250, 240, 250, 240, 250, 240, 250, 220], penalty: 0, start: 1792303200000, last: 1792307100000 }],
+  skipped: [], issues: [], stats: {}
+});
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS', 'access-control-expose-headers': '*' };
 
 async function setup(ctx, log, db) {
@@ -35,6 +42,8 @@ async function setup(ctx, log, db) {
     if (u.pathname === '/auth/v1/user') return req.headers()['authorization'] === 'Bearer ' + JWT ? json(200, USER) : json(401, { code: 401, error_code: 'bad_jwt', msg: 'invalid JWT' });
     if (u.pathname === '/rest/v1/events') return json(200, [{ id: 'sim-03', kind: 'sim', name: 'Editie 03', location: 'HAL60, Roelofarendsveen', sort_order: 3, accepts_entries: true }]);
     if (u.pathname === '/rest/v1/leaderboard' || u.pathname === '/rest/v1/results') return json(200, []);
+    if (u.pathname === '/rest/v1/raceclocker_cache') return json(200, db.rcRow ? [db.rcRow] : []);
+    if (u.pathname === '/functions/v1/raceclocker') return json(200, RC_PAYLOAD());
     if (u.pathname === '/rest/v1/profiles') {
       if (req.method() === 'GET') return json(200, db.profile ? [db.profile] : []);
       const row = JSON.parse(req.postData() || '{}');
@@ -103,6 +112,26 @@ async function page(b, log, db) {
     await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('verlopen'), null, { timeout: 10000 });
     check('C: expired link shows a toast and cleans the address', await p.evaluate(() => location.hash === ''), await p.evaluate(() => location.href));
     check('C: no page errors', errs.length === 0, errs);
+    await ctx.close();
+  }
+
+  { // D
+    const log = [], db = {};
+    const { ctx, p, errs } = await page(b, log, db);
+    await p.goto(BASE);
+    await p.waitForSelector('[data-row="rc-101"]', { timeout: 10000 });
+    const read = log.find(x => x.path === '/rest/v1/raceclocker_cache');
+    const q = read ? new URLSearchParams(read.search) : new URLSearchParams();
+    check('D: stored copy read through the REST API', !!read && read.m === 'GET' && q.get('select') === 'fetched_at,payload' && q.get('race_id') === 'eq.f4b23f3b', read && read.search);
+    const fn = log.filter(x => x.path === '/functions/v1/raceclocker');
+    check('D: nothing stored yet, so the function is asked once', fn.length === 1 && new URLSearchParams(fn[0].search).get('race') === 'f4b23f3b', fn.map(x => x.search));
+    check('D: official result on the leaderboard', (await p.textContent('[data-row="rc-101"]')).includes('Snelle Sander') && (await p.textContent('[data-row="rc-101"] .tm')) === '1:05:00');
+    db.rcRow = { fetched_at: new Date().toISOString(), payload: RC_PAYLOAD() };
+    log.length = 0;
+    await p.goto(BASE);
+    await p.waitForSelector('[data-row="rc-101"]', { timeout: 10000 });
+    check('D: fresh stored copy, no function call', log.some(x => x.path === '/rest/v1/raceclocker_cache') && !log.some(x => x.path === '/functions/v1/raceclocker'), log.map(x => x.path));
+    check('D: no page errors', errs.length === 0, errs);
     await ctx.close();
   }
 

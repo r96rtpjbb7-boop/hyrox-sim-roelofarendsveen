@@ -146,5 +146,27 @@ check('no header row: the first record is a participant', e2.entries.length === 
 check('laps without a bib number: left out and listed', e2.skipped.some(s => s.bib === '' && s.reason === 'geen startnummer'), e2.skipped);
 check('"Unknown" participant: left out and listed', e2.skipped.some(s => s.bib === '394' && /onbekende deelnemer/.test(s.reason)), e2.skipped);
 
+// Like edition 1: the category code is in "Custom" (Gender empty), and a deleted tap leaves a gap
+// in the lap numbers.
+const D1 = '2025-10-12';
+const custom = (o) => { const x = person({ ...o, gender: '', date: D1 }); x.Custom = o.code; return x; };
+const gap9 = custom({ bib: '11', name: 'Gat Negen', code: 'DS', segs: full });
+gap9.Laps = gap9.Laps.filter(l => String(l.LapNumber) !== '9');
+const gapDnf = custom({ bib: '12', name: 'Gat Uitval', code: 'HS', segs: full.slice(0, 7) });
+gapDnf.Laps = gapDnf.Laps.filter(l => String(l.LapNumber) !== '6');
+const e1 = normalise([
+  gap9, gapDnf,
+  custom({ bib: '13', name: 'Hans & Henk', code: 'HD', segs: full }),
+  custom({ bib: '14', name: 'Mix & Max', code: 'MD ', segs: full }),
+  custom({ bib: '15', name: 'Dien & Daan', code: 'dd', segs: full }),
+], '1fd4d9', 'sim-01', now, D1);
+const g9 = e1.entries.find(e => e.bib === '11');
+check('category code in "Custom" when Gender is empty', g9.cat === 'single_women' && g9.cat_raw === 'DS' && e1.entries.find(e => e.bib === '13').cat === 'doubles_men' && e1.entries.find(e => e.bib === '14').cat === 'doubles_mixed' && e1.entries.find(e => e.bib === '15').cat === 'doubles_women' && !e1.issues.some(i => /categorie/.test(i.issue)), e1.entries.map(e => e.cat));
+check('lap number missing: still finished, total from lap 16', g9.status === 'finished' && g9.laps === 16 && g9.total === sum(full), { status: g9.status, laps: g9.laps, total: g9.total });
+check('lap number missing: the two segments around it are shown together', g9.splits.length === 16 && g9.splits[8] === null && g9.splits[9] === null && g9.splits.filter(x => x === null).length === 2 && g9.merged.length === 1 && g9.merged[0].from === 8 && g9.merged[0].to === 9 && g9.merged[0].s === full[8] + full[9], { splits: g9.splits, merged: g9.merged });
+check('lap number missing: reported as missing, not as out of order', e1.issues.some(i => i.bib === '11' && /ronde 9 ontbreekt/.test(i.issue) && !/volgorde/.test(i.issue)), e1.issues.filter(i => i.bib === '11'));
+const gd = e1.entries.find(e => e.bib === '12');
+check('lap number missing before stopping: dnf with the laps up to the last tap', gd.status === 'dnf' && gd.laps === 7 && gd.splits.length === 7 && gd.splits[4] === full[4] && gd.splits[5] === null && gd.splits[6] === null && gd.merged[0].from === 5 && gd.merged[0].s === full[5] + full[6] && gd.last !== null, { status: gd.status, laps: gd.laps, splits: gd.splits });
+
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

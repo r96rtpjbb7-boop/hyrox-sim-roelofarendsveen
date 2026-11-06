@@ -7,7 +7,7 @@
 
 // Raise when the payload changes: the edge function then refetches instead of serving
 // a cached payload in the old format.
-export const VERSION = 4;
+export const VERSION = 5;
 export const SEGMENTS = 16;
 export const TZ = 'Europe/Amsterdam';
 // With more than 16 laps, a lap within this many ms after the previous one is a double tap.
@@ -16,8 +16,10 @@ const DOUBLE_TAP_MS = 5000;
 // tap that was missed and made up for with a double tap.
 const MIN_SEGMENT_DS = 200;
 
-// RaceClocker's "Gender" column holds the category of the race.
+// RaceClocker's "Gender" column holds the category of the race. Edition 01 left it empty and
+// has a code in "Custom" instead: H, D or M (heren, dames, mixed) + S or D (single, duo).
 const CATEGORY: Record<string, string> = {
+  'hs': 'single_men', 'ds': 'single_women', 'hd': 'doubles_men', 'dd': 'doubles_women', 'md': 'doubles_mixed',
   'man': 'single_men', 'men': 'single_men', 'single man': 'single_men', 'single men': 'single_men', 'single heren': 'single_men',
   'woman': 'single_women', 'women': 'single_women', 'single woman': 'single_women', 'single women': 'single_women', 'single dames': 'single_women',
   'duo men': 'doubles_men', 'duo man': 'doubles_men', 'men duo': 'doubles_men', 'duo heren': 'doubles_men',
@@ -141,12 +143,13 @@ export function trustedLaps(t: number[]): boolean[] {
   return onSome.map((on, i) => on && atPos[L[i]] === 1);
 }
 
-// Segment times from the laps; segments next to an untrusted lap get null, and each run of
-// those gets one combined time when the laps around it are trusted.
-export function lapSplits(start: number, marks: number[]) {
-  const tenths = [0, ...marks.map((ms) => Math.round((ms - start) / 100))];
-  const ok = trustedLaps(tenths);
-  const order = ok.map((v, i) => (v ? -1 : i)).filter((i) => i > 0);
+// Segment times from the laps; segments next to an untrusted or missing lap (null) get null,
+// and each run of those gets one combined time when the laps around it are trusted.
+export function lapSplits(start: number, marks: (number | null)[]) {
+  const tenths = [0, ...marks.map((ms) => (ms === null ? NaN : Math.round((ms - start) / 100)))];
+  const ok = trustedLaps(tenths); // a missing lap (NaN) is never trusted
+  const missing = marks.map((ms, i) => (ms === null ? i + 1 : -1)).filter((i) => i > 0);
+  const order = ok.map((v, i) => (v || Number.isNaN(tenths[i]) ? -1 : i)).filter((i) => i > 0);
   // A segment of a few seconds: the timer missed a lap and tapped twice at the next one, so
   // the first of the two taps is not when that lap was done.
   const double: { lap: number; gap: number }[] = [];
@@ -173,7 +176,7 @@ export function lapSplits(start: number, marks: number[]) {
     if (ok[a] && ok[b + 1]) merged.push({ from: a, to: b, s: sec[b + 1] - sec[a] });
     a = b;
   }
-  return { splits, merged, order, double, lastOk: ok[marks.length] };
+  return { splits, merged, order, missing, double, lastOk: ok[marks.length] };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -185,7 +188,7 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
   const days: Record<string, number> = {};
 
   // deno-lint-ignore no-explicit-any
-  const parsed: { p: any; bib: string; name: string; start: number | null; lap0: boolean; marks: number[] }[] = [];
+  const parsed: { p: any; bib: string; name: string; start: number | null; lap0: boolean; marks: (number | null)[] }[] = [];
   for (const p of Array.isArray(raw) ? raw : []) {
     const bib = clean(p?.['Bib number']);
     const name = clean(p?.Name);
@@ -207,7 +210,14 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
       .sort((a: { n: number }, b: { n: number }) => a.n - b.n) as { n: number; ms: number }[];
     const lap0 = laps.find((l) => l.n === 0);
     const start = lap0 ? lap0.ms : amsToEpoch(clean(p['Start date']), clean(p.Start));
-    const marks = laps.filter((l) => l.n >= 1).map((l) => l.ms);
+    const numbered = laps.filter((l) => l.n >= 1);
+    let marks: (number | null)[] = numbered.map((l) => l.ms);
+    // RaceClocker numbers the taps 1, 2, 3 ... A tap deleted afterwards leaves a gap in those
+    // numbers. The numbers then still say which lap each tap was; the gap is a lap without a time.
+    const top = numbered.length ? numbered[numbered.length - 1].n : 0;
+    if (top <= SEGMENTS && top > numbered.length && new Set(numbered.map((l) => l.n)).size === numbered.length) {
+      marks = Array.from({ length: top }, (_, i) => numbered.find((l) => l.n === i + 1)?.ms ?? null);
+    }
     // A race with a finish line on top of the laps: then the laps stop at 15.
     const finish = /^0?0:00:00/.test(clean(p.Finish)) ? null : amsToEpoch(clean(p['Finish date']), clean(p.Finish));
     if (finish !== null && marks.length === SEGMENTS - 1) marks.push(finish);
@@ -227,12 +237,13 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
   for (const x of parsed) {
     const { p, bib, name, start } = x;
     let marks = x.marks;
+    const times = (a: (number | null)[]) => a.filter((v): v is number => v !== null);
 
     // Laps on another day than the race: a test of the timing, not part of the race.
     const offDay = date ? [start, ...marks].filter((v): v is number => v !== null).map(ymd).find((d) => d !== date) : undefined;
     if (offDay) { skipped.push({ bib, name, reason: `rondes op ${offDay}, niet op de racedag ${date}` }); continue; }
 
-    const catRaw = clean(p.Gender);
+    const catRaw = clean(p.Gender) || clean(p.Custom);
     const cat = CATEGORY[catRaw.toLowerCase()] ?? null;
     if (!cat) issues.push({ bib, name, issue: `onbekende categorie "${catRaw}"` });
     const totalOnly = cat !== null && TOTAL_ONLY.has(cat);
@@ -243,7 +254,7 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
     if (marks.length > SEGMENTS && start !== null && !totalOnly) {
       let extra = marks.length - SEGMENTS;
       const kept: number[] = [];
-      for (const ms of marks) {
+      for (const ms of times(marks)) {
         const prev = kept.length ? kept[kept.length - 1] : start;
         if (extra > 0 && ms >= prev && ms - prev < DOUBLE_TAP_MS) { extra--; continue; }
         kept.push(ms);
@@ -264,14 +275,16 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
       merged = r.merged;
       lastOk = r.lastOk;
       const why: string[] = [];
-      if (r.order.length) why.push(`${r.order.map((i) => `ronde ${i} (${clock(used[i - 1])})`).join(', ')} past niet in de volgorde`);
+      if (r.order.length) why.push(`${r.order.map((i) => `ronde ${i} (${clock(used[i - 1] as number)})`).join(', ')} past niet in de volgorde`);
+      if (r.missing.length) why.push(`${r.missing.map((i) => `ronde ${i}`).join(', ')} ontbreekt`);
       for (const d of r.double) why.push(`ronde ${d.lap} is ${d.gap} s voor de volgende getikt, een tik gemist`);
       if (why.length) issues.push({ bib, name, issue: `${why.join('; ')}: die onderdelen staan samen` });
     }
 
     let status: Status;
     let total: number | null = null;
-    const finishSec = start !== null && done === SEGMENTS ? Math.round((used[SEGMENTS - 1] - start) / 1000) : null;
+    const fin = done === SEGMENTS ? used[SEGMENTS - 1] : null;
+    const finishSec = start !== null && fin !== null ? Math.round((fin - start) / 1000) : null;
     if (finishSec !== null && finishSec <= 0) {
       skipped.push({ bib, name, reason: 'de start ligt na de finish, tijd niet te berekenen' });
       continue;
@@ -279,7 +292,7 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
     if (finishSec !== null) {
       total = finishSec + penalty;
       status = 'finished';
-      if (!lastOk) issues.push({ bib, name, issue: `finish (${clock(used[SEGMENTS - 1])}) ligt voor een eerdere ronde, eindtijd nakijken` });
+      if (!lastOk) issues.push({ bib, name, issue: `finish (${clock(fin as number)}) ligt voor een eerdere ronde, eindtijd nakijken` });
     } else if (resultSec > 0) {
       total = resultSec + penalty;
       status = 'finished';
@@ -291,7 +304,7 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
     } else if (start !== null && start <= now && (x.lap0 || done)) {
       // In a wave start everyone in the wave gets lap 0, also no-shows. Nobody needs half
       // an hour for the first kilometre or 40 minutes for one segment.
-      const idleMin = (now - (done ? Math.max(...used) : start)) / 60000;
+      const idleMin = (now - (times(used).length ? Math.max(...times(used)) : start)) / 60000;
       if (!done) status = idleMin > 30 ? 'dns' : 'running';
       else status = idleMin > 40 ? 'dnf' : 'running';
     } else {
@@ -302,7 +315,7 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
     const e: Entry = {
       bib, name, names: splitNames(name), cat, cat_raw: catRaw, age: clean(p.Age), wave: clean(p.Wave),
       status, laps: done, total, splits, penalty, start,
-      last: status === 'finished' && done === SEGMENTS ? used[SEGMENTS - 1] : done ? Math.max(...used) : null,
+      last: status === 'finished' && fin !== null ? fin : times(used).length ? Math.max(...times(used)) : null,
     };
     if (merged.length) e.merged = merged;
     if (penaltyNote) e.penalty_note = penaltyNote;

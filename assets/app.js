@@ -788,9 +788,20 @@
   $('#f-cat').innerHTML = CATS.filter(function (c) { return !c.rcOnly; }).map(function (c) { return '<option value="' + c.id + '">' + c.label + '</option>'; }).join('');
   // Editions with official timing are on the leaderboard by themselves.
   function enterable(e) { return e.accepts_entries && !rcRace(e.id); }
+  function editingEvent() {
+    var e = editing && state.mine.filter(function (x) { return x.id === editing; })[0];
+    return e ? e.event_id : null;
+  }
   function syncForm() {
+    // No sim edition left to enter a time for (they all have official timing): the form is for
+    // official Hyrox races, unless an older sim time is being edited.
+    var editEv = editingEvent();
+    var simOpen = !state.events.length || eventsOf('sim').some(enterable) || (!!editEv && srcOfEvent(editEv) === 'sim');
+    $('#f-src-sim').disabled = !simOpen;
+    $('#f-src-note').hidden = simOpen;
+    if (!simOpen && $('#f-src-sim').checked) $('#f-src-off').checked = true;
     var src = formSrc(), sel = $('#f-event'), cur = sel.value;
-    var evs = eventsOf(src).filter(function (e) { return enterable(e) || e.id === cur; });
+    var evs = eventsOf(src).filter(function (e) { return enterable(e) || e.id === cur || e.id === editEv; });
     sel.innerHTML = evs.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name) + '</option>'; }).join('');
     if (evs.some(function (e) { return e.id === cur; })) sel.value = cur;
     $('#fw-div').hidden = src !== 'off';
@@ -915,7 +926,7 @@
       '<div><span class="k">Snelste officieel</span><span class="v">' + best(es.filter(function (e) { return srcOfEvent(e.event_id) === 'off'; })) + '</span></div>';
     $('#entry-list').innerHTML = es.length
       ? es.map(entryHTML).join('')
-      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in' + (eventsOf('sim').filter(enterable)[0] ? ', bijvoorbeeld van ' + esc(eventsOf('sim').filter(enterable)[0].name.toLowerCase()) : '') + '. Die staat daarna meteen op het leaderboard.</li>';
+      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in, bijvoorbeeld van ' + (eventsOf('sim').filter(enterable)[0] ? esc(eventsOf('sim').filter(enterable)[0].name.toLowerCase()) : 'een officiële Hyrox-race') + '. Die staat daarna meteen op het leaderboard.</li>';
   }
 
   /* ---------- Routing ---------- */

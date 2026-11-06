@@ -322,6 +322,8 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .radio-row label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); padding: 11px 14px; cursor: pointer; font-weight: 600; font-size: 14px; }
 .radio-row label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
 .radio-row input { accent-color: var(--accent); margin: 0; }
+.radio-row label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+.src-note { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .form-error { margin: 0; color: var(--err); font-size: 14px; font-weight: 600; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }

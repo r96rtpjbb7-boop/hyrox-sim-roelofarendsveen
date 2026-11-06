@@ -51,6 +51,17 @@ const RC_ARCHIVE2 = () => ({
   ],
   skipped: [], issues: [], stats: {}
 });
+// Edition 01 (race 1fd4d9): two of the same people, slower than later, and one who only ran 01.
+const RC_ARCHIVE1 = () => ({
+  v: 5, race: '1fd4d9', event: 'sim-01', date: '2025-10-12', live: false, fetched_at: new Date().toISOString(),
+  entries: [
+    rcEntry({ bib: '151', name: 'Snelle Sander', cat: 'single_men', total: 4100, start: Date.parse('2025-10-12T07:00:00Z') }),
+    rcEntry({ bib: '152', name: 'Jeroen de Vries', cat: 'single_men', total: 4300, start: Date.parse('2025-10-12T07:00:00Z') }),
+    rcEntry({ bib: '153', name: 'Eerste Evert', cat: 'single_men', total: 4600, start: Date.parse('2025-10-12T07:00:00Z') }),
+    rcEntry({ bib: '154', name: 'Vroege Vera', cat: 'single_women', total: 4550, start: Date.parse('2025-10-12T07:15:00Z') })
+  ],
+  skipped: [], issues: [], stats: {}
+});
 // Race day of edition 04: stage 1 has two athletes on the course, from stage 2 on one of them is in.
 function RC_LIVE(stage) {
   const now = Date.now(), start = now - 40 * 60e3, early = now - 70 * 60e3;
@@ -70,6 +81,15 @@ function RC_LIVE(stage) {
 }
 // Remove the RaceClocker line from config.js, for tests of self-reported times on edition 03.
 const noRC = body => body.replace(/^\s*raceclocker:.*$/m, '');
+// Leave one edition out of the RaceClocker line, for tests of an edition with self-reported times
+// next to editions with official timing.
+const dropRC = (body, ev) => body.replace(new RegExp("'" + ev + "': '[0-9a-f]+',? ?"), '');
+async function withoutRC(ctx, ev) {
+  await ctx.route(/assets\/config\.js/, async rt => {
+    const resp = await rt.fetch();
+    rt.fulfill({ response: resp, body: dropRC(await resp.text(), ev) });
+  });
+}
 
 async function setup(ctx, errs, tag) {
   await ctx.route(/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, r => r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE }));
@@ -78,8 +98,8 @@ async function setup(ctx, errs, tag) {
     const m = r.request().url().match(/local\/([^/]+)\/([^/?]+)/);
     r.fulfill({ status: 200, contentType: 'font/woff2', body: fs.readFileSync(path.join(FS, m[1], 'files', m[2])) });
   });
-  // The edge function: archive results for editions 02 and 03, live results for a race 'abcd1234'.
-  ctx.rc = { calls: [], fail: false, payload: url => (/abcd1234/.test(url) ? RC_LIVE(ctx.rc.calls.filter(u => /abcd1234/.test(u)).length) : /0839eb85/.test(url) ? RC_ARCHIVE2() : RC_ARCHIVE()) };
+  // The edge function: archive results for editions 01, 02 and 03, live results for a race 'abcd1234'.
+  ctx.rc = { calls: [], fail: false, payload: url => (/abcd1234/.test(url) ? RC_LIVE(ctx.rc.calls.filter(u => /abcd1234/.test(u)).length) : /1fd4d9/.test(url) ? RC_ARCHIVE1() : /0839eb85/.test(url) ? RC_ARCHIVE2() : RC_ARCHIVE()) };
   await ctx.route(/\/functions\/v1\/raceclocker/, r => {
     const url = r.request().url();
     ctx.rc.calls.push(url);
@@ -398,9 +418,15 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await e.fill('#p-name', 'Live Test');
   await e.click('#p-btn');
   await e.waitForSelector('#view-account:not([hidden])');
-  check('form offers neither edition 04 (not raced yet) nor 02 and 03 (official timing)', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
+  check('form: every sim edition has official timing or is not raced yet, so only official Hyrox races', await e.isDisabled('#f-src-sim') && await e.isChecked('#f-src-off') && await e.isVisible('#f-src-note') && JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Hyrox Utrecht', 'Hyrox Amsterdam']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
+  check('form says why', (await e.textContent('#f-src-note')).startsWith('De tijden van de sim komen uit de officiële tijdwaarneming'));
   check('form has no Kids category', !(await e.$$eval('#f-cat option', o => o.map(x => x.value))).includes('kids'));
-  check('empty list suggests the latest edition you can fill in', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 01'), await e.textContent('#entry-list'));
+  check('empty list suggests an official race', (await e.textContent('#entry-list')).includes('bijvoorbeeld van een officiële Hyrox-race'), await e.textContent('#entry-list'));
+  await e.selectOption('#f-event', 'off-utrecht');
+  await e.fill('#f-time', '1:12:05');
+  await e.click('#f-submit');
+  await e.waitForSelector('#entry-list [data-del-yes], #entry-list button');
+  check('form: after saving an official time it is still for official races only', await e.isDisabled('#f-src-sim') && await e.isChecked('#f-src-off') && (await e.textContent('#entry-list')).includes('Hyrox Utrecht'), await e.textContent('#entry-list'));
   await ctx3.close();
 
   // Official timing (RaceClocker): edition 03 from the real config
@@ -451,17 +477,27 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   check('RC: kids show the total only', (await r.textContent('#sp-rc401 .sp-sum')) === 'Bij de kids telt alleen de eindtijd.' && (await r.textContent('[data-row="rc-401"] .tm')) === '0:19:10');
   check('RC: only the category switch, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
   await r.selectOption('#lb-event', 'sim-01');
-  await r.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
-  const chips2 = await r.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.trim()));
-  check('RC: other edition back to self-reported: club filter, no counts, no Kids', await r.isVisible('#lb-club') && chips2.length === 6 && chips2[0] === 'Single mannen' && (await r.$eval('#lb-cats [aria-pressed="true"]', x => x.dataset.cat)) === 'single_men', chips2);
+  await r.waitForSelector('[data-row="rc-151"]');
+  const chips1 = await r.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  check('RC: edition 01 official too, from race 1fd4d9', ctxR.rc.calls.length === 2 && /race=1fd4d9/.test(ctxR.rc.calls[1]) && (await r.getAttribute('#lb-summary a', 'href')) === 'https://raceclocker.com/1fd4d9' && await r.isHidden('#lb-club'), ctxR.rc.calls);
+  check('RC: edition 01 without Kids, back to Single mannen', JSON.stringify(chips1) === JSON.stringify(['Single mannen 3', 'Single vrouwen 1', 'Mixed dubbel 0', 'Mannen dubbel 0', 'Vrouwen dubbel 0', 'Relay 0']) && (await r.$eval('#lb-cats [aria-pressed="true"]', x => x.dataset.cat)) === 'single_men', chips1);
+  await r.selectOption('#lb-event', 'all');
+  await r.waitForSelector('[data-row^="at-"]');
+  const rAll = await r.$$eval('#lb-list .lb-row', rows => rows.map(x => [x.querySelector('.nm').textContent, x.querySelector('.tm').textContent, x.querySelector('.meta').textContent]));
+  check('all-time from three official editions', rAll.length === 7 && rAll[1][0] === 'Snelle Sander' && /3 edities$/.test(rAll[1][2]) && rAll[6][0] === 'Eerste Evert' && /^Editie 01.*Officiële tijd/.test(rAll[6][2]), rAll);
+  check('all-time: edition 02 fetched once more, nothing self-reported asked for', ctxR.rc.calls.length === 3 && /race=0839eb85/.test(ctxR.rc.calls[2]) && (await r.evaluate(() => window.__calls.filter(x => x.t === 'leaderboard').length)) === 0, ctxR.rc.calls);
+  await r.click('[data-row="at-sim-02-rc-354"]');
+  check('all-time: official editions 01 and 02 of the same person', (await r.textContent('#sp-atsim02rc354 .at-history')) === 'Alle edities: Editie 01 1:11:40 · Editie 02 1:10:50. De snelste telt.', await r.textContent('#sp-atsim02rc354 .at-history'));
   await r.selectOption('#lb-event', 'sim-03');
   await r.waitForSelector('[data-row="rc-101"]');
-  check('RC: back to edition 03 from memory, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
+  check('RC: back to edition 03 from memory, no new request', ctxR.rc.calls.length === 3, ctxR.rc.calls.length);
   await ctxR.close();
 
-  // All-time: editions 02 and 03 from RaceClocker, edition 01 self-reported, best time per person
+  // All-time: editions 02 and 03 from RaceClocker, edition 01 self-reported (as an edition without
+  // timing would be), best time per person
   const ctxA = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
   await setup(ctxA, errs, 'alltime');
+  await withoutRC(ctxA, 'sim-01');
   const A = await ctxA.newPage();
   await A.goto(BASE);
   await A.waitForSelector('[data-row="rc-101"]');
@@ -495,6 +531,11 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await A.selectOption('#lb-event', 'sim-03');
   await A.waitForSelector('[data-row="rc-201"]');
   check('all-time: back to edition 03 without new requests', ctxA.rc.calls.length === 2, ctxA.rc.calls.length);
+  await A.click('[data-cat="kids"]');
+  await A.selectOption('#lb-event', 'sim-01');
+  await A.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
+  const chips2 = await A.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.trim()));
+  check('RC: other edition back to self-reported: club filter, no counts, no Kids', await A.isVisible('#lb-club') && chips2.length === 6 && chips2[0] === 'Single mannen' && (await A.$eval('#lb-cats [aria-pressed="true"]', x => x.dataset.cat)) === 'single_men', chips2);
   await ctxA.close();
 
   // A fresh stored copy is used as is; a stale one is refreshed; if that fails the stored copy stays.
@@ -528,7 +569,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await ctxL.route(/assets\/config\.js/, async rt => {
     const resp = await rt.fetch(); let body = await resp.text();
     body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '" + new Date(Date.now() - 60e3).toISOString() + "'")
-      .replace("raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
+      .replace("raceclocker: { 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
     rt.fulfill({ response: resp, body });
   });
   const L = await ctxL.newPage();

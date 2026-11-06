@@ -76,9 +76,19 @@
 
   function uid() { return state.session && state.session.user ? state.session.user.id : null; }
   function loggedIn() { return !!(uid() && state.profile); }
+  // The coming edition (config nextEdition) stays off the leaderboard and the form until it has started.
+  var NE = CFG.nextEdition || {};
+  var NE_NUM = NE.number || '04';
+  var NE_HAS_TIME = typeof NE.start === 'string' && /T\d/.test(NE.start);
+  var NE_START = (function () {
+    if (!NE.start) return null;
+    var d = new Date(NE_HAS_TIME ? NE.start : NE.start + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  })();
+  function notYetRaced(id) { return !!NE.eventId && id === NE.eventId && (!NE_START || Date.now() < NE_START.getTime()); }
   function eventsOf(src) {
     var kind = src === 'sim' ? 'sim' : 'official';
-    var list = state.events.filter(function (e) { return e.kind === kind; });
+    var list = state.events.filter(function (e) { return e.kind === kind && !notYetRaced(e.id); });
     list.sort(function (a, b) { return src === 'sim' ? b.sort_order - a.sort_order : a.sort_order - b.sort_order; });
     return list;
   }
@@ -241,7 +251,7 @@
     if (t.closest('#lb-retry')) { loadBoard(); return; }
     if (t.closest('[data-open-login]')) { e.preventDefault(); goMine(); return; }
     if (t.closest('[data-signup]')) {
-      toast('De inschrijving voor editie ' + ((CFG.nextEdition && CFG.nextEdition.number) || '05') + ' opent binnenkort.');
+      toast('De inschrijving voor editie ' + NE_NUM + ' opent binnenkort.');
       return;
     }
     if ((el = t.closest('[data-edit]'))) { startEdit(el.dataset.edit); return; }
@@ -507,7 +517,7 @@
       '<div><span class="k">Snelste officieel</span><span class="v">' + best(es.filter(function (e) { return srcOfEvent(e.event_id) === 'off'; })) + '</span></div>';
     $('#entry-list').innerHTML = es.length
       ? es.map(entryHTML).join('')
-      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in, bijvoorbeeld van editie 04. Die staat daarna meteen op het leaderboard.</li>';
+      : '<li class="empty"><b>Nog geen tijden.</b> Vul hiernaast je eerste tijd in' + (eventsOf('sim')[0] ? ', bijvoorbeeld van ' + esc(eventsOf('sim')[0].name.toLowerCase()) : '') + '. Die staat daarna meteen op het leaderboard.</li>';
   }
 
   /* ---------- Routing ---------- */
@@ -531,16 +541,15 @@
   var MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   var DAYS = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
   var FULLDAYS = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+  function dmy(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear(); }
   function renderStatic() {
-    var ne = CFG.nextEdition || {};
-    var num = ne.number || '05';
-    var start = ne.start ? new Date(ne.start) : null;
-    if (start && isNaN(start.getTime())) start = null;
+    var num = NE_NUM, start = NE_START;
     var dateTxt = start ? DAYS[start.getDay()] + ' ' + start.getDate() + ' ' + MONTHS[start.getMonth()] + ' ' + start.getFullYear() : 'datum volgt';
-    $('#announce-left').textContent = 'Editie ' + num + ' · ' + dateTxt + ' · ' + (ne.location || 'HAL60, Roelofarendsveen');
+    var longDate = start ? FULLDAYS[start.getDay()].toLowerCase() + ' ' + start.getDate() + ' ' + MONTHS[start.getMonth()] + ' ' + start.getFullYear() : '';
+    $('#announce-left').textContent = 'Editie ' + num + ' · ' + dateTxt + ' · ' + (NE.location || 'HAL60, Roelofarendsveen');
     $('.bib .num').textContent = num;
-    $('#bib-foot').textContent = 'EDITIE · ' + (start ? String(start.getDate()).padStart(2, '0') + '.' + String(start.getMonth() + 1).padStart(2, '0') + '.' + start.getFullYear() : 'DATUM VOLGT');
-    $('#bib-start').textContent = start ? 'START ' + String(start.getHours()).padStart(2, '0') + ':' + String(start.getMinutes()).padStart(2, '0') : 'EDITIE ' + num;
+    $('#bib-foot').textContent = 'EDITIE · ' + (start ? dmy(start) : 'DATUM VOLGT');
+    $('#bib-start').textContent = start && NE_HAS_TIME ? 'START ' + String(start.getHours()).padStart(2, '0') + ':' + String(start.getMinutes()).padStart(2, '0') : 'EDITIE ' + num;
     $('#prog-title').textContent = start ? FULLDAYS[start.getDay()] + ' ' + start.getDate() + ' ' + MONTHS[start.getMonth()] : 'Editie ' + num;
     // With a signup link the buttons become real links (new tab, long-press and copy work on phones).
     if (CFG.signupUrl) {
@@ -555,7 +564,9 @@
     $('#timeline').innerHTML = prog.map(function (p) { return '<li><b>' + esc(p[0]) + '</b><span>' + esc(p[1]) + '</span></li>'; }).join('');
     $('#timeline').hidden = !prog.length;
     $('#prog-note').textContent = prog.length ? 'Voorlopig programma. Je exacte heattijd krijg je een week van tevoren per mail.' : 'Het programma volgt zodra de heats bekend zijn.';
-    if (start) {
+    var future = !!start && start.getTime() > Date.now();
+    if (future && NE_HAS_TIME) {
+      // Start time known: count down to the second.
       $('#countdown').hidden = false; $('#countdown-tbd').hidden = true;
       $('#countdown').firstChild.textContent = 'Start editie ' + num + ' over ';
       var tick = function () {
@@ -568,7 +579,9 @@
       };
       tick(); setInterval(tick, 1000);
     } else {
-      $('#countdown-tbd').textContent = 'Editie ' + num + ' · datum volgt';
+      $('#countdown').hidden = true; $('#countdown-tbd').hidden = false;
+      var left = future ? Math.ceil((start.getTime() - Date.now()) / 864e5) : 0;
+      $('#countdown-tbd').textContent = 'Editie ' + num + ' · ' + (!start ? 'datum volgt' : longDate + (future ? ' · nog ' + left + (left === 1 ? ' dag' : ' dagen') : ''));
     }
   }
 

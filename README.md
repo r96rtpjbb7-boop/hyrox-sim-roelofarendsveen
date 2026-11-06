@@ -19,7 +19,10 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
 
 ## Instellingen in `assets/config.js`
 
-- `nextEdition.start`: starttijd van de volgende editie, bijvoorbeeld `'2027-03-13T08:00:00+01:00'`. Met `null` toont de site "datum volgt" en geen aftelklok.
+- `nextEdition`: de komende editie (nu editie 04 op zondag 14 maart 2027).
+  - `number`: het nummer op de site, bijvoorbeeld `'04'`.
+  - `eventId`: de id van deze editie in de tabel `events`, bijvoorbeeld `'sim-04'`. Tot de start staat deze editie niet op het leaderboard en niet in het invulformulier, zodat niemand vooraf een tijd kan invullen. Vanaf de start verschijnt hij vanzelf.
+  - `start`: alleen de datum (`'2027-03-14'`, de site toont dan "nog 128 dagen") of de datum met de starttijd van de eerste heat (`'2027-03-14T08:00:00+01:00'`, dan komt er een aftelklok tot op de seconde). Met `null` toont de site "datum volgt".
 - `signupUrl`: link naar het inschrijfformulier. Met `null` geven de inschrijfknoppen een melding dat de inschrijving binnenkort opent.
 - `programme`: het tijdschema. Een lege lijst (`[]`) toont "programma volgt".
 - `codeLength` (optioneel, standaard 6): moet gelijk zijn aan "Email OTP Length" in Supabase.
@@ -31,7 +34,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
 
 ### Tabellen
 
-- `events`: edities van de sim (`sim-01` t/m `sim-04`) en officiële events (`off-utrecht`, `off-amsterdam`). `accepts_entries = false` sluit een event voor nieuwe tijden.
+- `events`: edities van de sim (`sim-01` t/m `sim-03` zijn gelopen, `sim-04` is op 14 maart 2027) en officiële events (`off-utrecht`, `off-amsterdam`). `accepts_entries = false` sluit een event voor nieuwe tijden.
 - `profiles`: naam en club per ingelogde deelnemer. E-mailadressen staan hier niet in en zijn nooit openbaar.
 - `results`: tijden. Categorieën `single_men`, `single_women`, `doubles_mixed`, `doubles_men`, `doubles_women`, `relay`. Divisie `open` of `pro`. Status `self_reported`, `verified` of `rejected`.
 - `admins`: e-mailadressen van organisatoren. Niet via de site te lezen.
@@ -63,7 +66,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
 
 ## Beheer
 
-- **Nieuwe editie**: Table Editor, `events`, Insert row: `id` `sim-05`, `kind` `sim`, `name` `Editie 05`, `location` `HAL60, Roelofarendsveen`, `sort_order` `5`. Doe dit pas als de editie geweest is, want dan kunnen deelnemers hun tijd invullen.
+- **Volgende editie**: voeg hem vooraf toe in Table Editor, `events`, Insert row: `id` `sim-05`, `kind` `sim`, `name` `Editie 05`, `location` `HAL60, Roelofarendsveen`, `sort_order` `5`. Zet daarna in `config.js` bij `nextEdition` het nummer `'05'`, de `eventId` `'sim-05'` en de datum. De site laat de editie pas vanaf de start zien op het leaderboard en in het formulier.
 - **Nieuw officieel event**: bijvoorbeeld `id` `off-rotterdam`, `kind` `official`, `name` `Hyrox Rotterdam`, `sort_order` `103`.
 - **Tijd goed- of afkeuren**: Table Editor, `results`, kolom `status` op `verified` of `rejected`.
 - **Oude uitslagen importeren**: Table Editor, `results`, Insert, Import data from CSV, met de kolommen `athlete_name`, `athlete_club`, `event_id`, `category`, `total_seconds` en bij dubbels `partner_name` (bij relay ook `team_name` en `teammates`). Geïmporteerde tijden horen bij niemand; laat deelnemers die tijden dan niet zelf nog eens invoeren, anders staan ze er twee keer in.

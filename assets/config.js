@@ -9,10 +9,15 @@ window.HYROX_CONFIG = {
   supabaseKey: 'sb_publishable_zvpz2bRE_hWO5J-twb0zMw_nIPEMUgO',
 
   nextEdition: {
-    number: '05',
-    // Starttijd van de eerste heat, bijvoorbeeld '2027-03-13T08:00:00+01:00'.
-    // Laat op null staan zolang de datum niet vaststaat; dan toont de site "datum volgt".
-    start: null,
+    number: '04',
+    // Id van deze editie in de tabel events. De site toont deze editie pas vanaf de start op het
+    // leaderboard en in het invulformulier, zodat niemand vooraf een tijd kan invullen.
+    eventId: 'sim-04',
+    // Datum, eventueel met de starttijd van de eerste heat:
+    //   '2027-03-14'                  alleen de datum: "nog 128 dagen"
+    //   '2027-03-14T08:00:00+01:00'   met starttijd: aftelklok tot op de seconde
+    // null = "datum volgt".
+    start: '2027-03-14',
     location: 'HAL60, Roelofarendsveen'
   },
 

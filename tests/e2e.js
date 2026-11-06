@@ -28,8 +28,13 @@ const wait = (p, ms) => p.waitForTimeout(ms);
 (async () => {
   const b = await chromium.launch();
   const errs = [];
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
   await setup(ctx, errs, 'desk');
+  await ctx.route(/assets\/config\.js/, async r => {
+    const resp = await r.fetch(); let body = await resp.text();
+    body = body.replace("start: '2027-03-14'", "start: '2026-01-11'");
+    r.fulfill({ response: resp, body });
+  });
   const p = await ctx.newPage();
   await p.goto(BASE);
   await p.waitForSelector('#lb-list .lb-row');
@@ -255,19 +260,20 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   check('expired link explained and hash cleaned', (await p.evaluate(() => location.hash)) === '');
 
   // Config: date, countdown, signup link
-  const ctx2 = await b.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx2 = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
   await setup(ctx2, errs, 'cfg');
   await ctx2.route(/assets\/config\.js/, async r => {
     const resp = await r.fetch(); let body = await resp.text();
-    body = body.replace("start: null", "start: '2027-03-13T08:00:00+01:00'").replace('signupUrl: null', "signupUrl: 'https://example.com/inschrijven'");
+    body = body.replace("start: '2027-03-14'", "start: '2027-03-14T08:00:00+01:00'").replace('signupUrl: null', "signupUrl: 'https://example.com/inschrijven'");
     r.fulfill({ response: resp, body });
   });
   const c = await ctx2.newPage();
   await c.goto(BASE);
   await c.waitForSelector('#lb-list .lb-row');
   check('countdown visible with date', await c.isVisible('#countdown') && await c.isHidden('#countdown-tbd'));
-  check('programme title uses weekday', (await c.textContent('#prog-title')) === 'Zaterdag 13 maart', await c.textContent('#prog-title'));
-  check('announcement shows date', (await c.textContent('#announce-left')).includes('za 13 maart 2027'), await c.textContent('#announce-left'));
+  check('programme title uses weekday', (await c.textContent('#prog-title')) === 'Zondag 14 maart', await c.textContent('#prog-title'));
+  check('announcement shows date', (await c.textContent('#announce-left')) === 'Editie 04 · zo 14 maart 2027 · HAL60, Roelofarendsveen', await c.textContent('#announce-left'));
+  check('bib shows start time', (await c.textContent('#bib-start')) === 'START 08:00', await c.textContent('#bib-start'));
   check('signup buttons become links', (await c.$$eval('a.btn[href="https://example.com/inschrijven"][target="_blank"][rel="noopener"]', e => e.length)) === 2 && (await c.$$eval('[data-signup]', e => e.length)) === 0);
   await c.screenshot({ path: 'site-desk-top.png' });
   // Without signup link: toast
@@ -275,7 +281,33 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await p.waitForSelector('#lb-list .lb-row');
   await p.click('.hero [data-signup]');
   check('no signup link -> toast', (await p.textContent('#toast')).includes('opent binnenkort'));
-  check('no date -> datum volgt', (await p.textContent('#announce-left')).includes('datum volgt'));
+  check('past edition -> no countdown', await p.isHidden('#countdown') && (await p.textContent('#countdown-tbd')) === 'Editie 04 · zondag 11 januari 2026', await p.textContent('#countdown-tbd'));
+
+  // Real config: edition 04 on Sunday 14 March 2027 is not raced yet
+  const ctx3 = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
+  await setup(ctx3, errs, 'live');
+  const e = await ctx3.newPage();
+  await e.goto(BASE);
+  await e.waitForSelector('#lb-list .lb-row');
+  check('coming edition hidden from leaderboard', (await e.$eval('#lb-event', s => s.value)) === 'sim-03' && !(await e.$$eval('#lb-event option', o => o.map(x => x.value))).includes('sim-04'));
+  check('date-only start shows days left', /^Editie 04 · zondag 14 maart 2027 · nog \d+ dagen$/.test(await e.textContent('#countdown-tbd')) && await e.isHidden('#countdown'), await e.textContent('#countdown-tbd'));
+  check('announcement for edition 04', (await e.textContent('#announce-left')) === 'Editie 04 · zo 14 maart 2027 · HAL60, Roelofarendsveen', await e.textContent('#announce-left'));
+  check('bib for edition 04', (await e.textContent('.bib .num')) === '04' && (await e.textContent('#bib-start')) === 'EDITIE 04' && (await e.textContent('#bib-foot')) === 'EDITIE · 14.03.2027');
+  check('programme title for edition 04', (await e.textContent('#prog-title')) === 'Zondag 14 maart', await e.textContent('#prog-title'));
+  await e.click('.hero [data-signup]');
+  check('signup toast names edition 04', (await e.textContent('#toast')).includes('editie 04'), await e.textContent('#toast'));
+  await e.click('#nav-cta');
+  await e.fill('#l-mail', 'live@test.nl');
+  await e.click('#l-mail-btn');
+  await e.waitForSelector('[data-step="code"]:not([hidden])');
+  await e.fill('#l-code', '424242');
+  await e.waitForSelector('[data-step="profile"]:not([hidden])');
+  await e.fill('#p-name', 'Live Test');
+  await e.click('#p-btn');
+  await e.waitForSelector('#view-account:not([hidden])');
+  check('form cannot pick edition 04 yet', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 03', 'Editie 02', 'Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
+  check('empty list suggests latest raced edition', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 03'), await e.textContent('#entry-list'));
+  await ctx3.close();
 
   // Mobile
   for (const w of [390, 360]) {

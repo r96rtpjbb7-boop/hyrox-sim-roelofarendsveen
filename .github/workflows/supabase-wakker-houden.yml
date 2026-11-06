@@ -1,0 +1,17 @@
+# Houdt het gratis Supabase-project wakker: zonder verkeer pauzeert Supabase het na een week.
+name: Supabase wakker houden
+on:
+  schedule:
+    - cron: '17 6 * * 1,4'   # maandag en donderdag 06:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Events opvragen
+        run: |
+          curl -fsS "https://ocdnerhyssvkjhdgstvp.supabase.co/rest/v1/events?select=id&limit=1" \
+            -H "apikey: sb_publishable_zvpz2bRE_hWO5J-twb0zMw_nIPEMUgO" \
+            -o /dev/null -w "Supabase antwoordde met HTTP %{http_code}\n"

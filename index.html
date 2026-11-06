@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hyrox Sim Roelofarendsveen</title>
+<meta name="description" content="Hyrox-simulatie in HAL60, Roelofarendsveen, door Club Confidence en By Opdam. Parcours, programma en het leaderboard waar je zelf je tijd op zet.">
+<meta name="theme-color" content="#0B0B0A">
+<meta property="og:title" content="Hyrox Sim Roelofarendsveen">
+<meta property="og:description" content="De race vóór de race. Zet je tijd op het leaderboard.">
+<meta property="og:image" content="img/rope-bw.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23EB4967'/%3E%3Ctext x='32' y='44' font-family='Arial Black,Arial' font-weight='900' font-size='30' text-anchor='middle' fill='%230B0B0A'%3EHS%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Big+Shoulders+Display:wght@700;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<div class="announce">
+  <div class="wrap">
+    <span id="announce-left">Editie 05 · datum volgt · HAL60 Roelofarendsveen</span>
+    <span>Zet je tijd zelf op het leaderboard</span>
+  </div>
+</div>
+
+<nav class="nav" aria-label="Hoofdmenu">
+  <div class="wrap">
+    <a class="brand" href="#top"><b>HYROX SIM</b><span>ROELOFARENDSVEEN</span></a>
+    <div class="nav-links" id="nav-links">
+      <a href="#parcours">Parcours</a>
+      <a href="#programma">Programma</a>
+      <a href="#leaderboard">Leaderboard</a>
+      <a href="#fotos">Foto's</a>
+      <a href="#faq">Vragen</a>
+    </div>
+    <div class="nav-right">
+      <a class="btn btn-primary btn-sm" id="nav-cta" href="#mijn-tijden">Tijd invoeren</a>
+      <button type="button" class="btn btn-quiet btn-sm menu-btn" id="menu-btn" aria-expanded="false" aria-controls="nav-links" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</nav>
+
+<main id="view-home">
+  <section class="hero" id="top">
+    <img class="bg" src="img/rope-bw.jpg" alt="Deelnemer trekt het touw bij de sled pull, met touwen op de vloer" fetchpriority="high">
+    <div class="scrim"></div>
+    <div class="wrap hero-in">
+      <span class="eyebrow">Hyrox-simulatie · Club Confidence × By Opdam</span>
+      <h1 class="h-display">De race <em>vóór</em> de race.</h1>
+      <p class="lead">Acht keer een kilometer lopen, acht stations, echte jury en een eindtijd die telt. Train voor Utrecht of Amsterdam op je eigen vloer in Roelofarendsveen.</p>
+      <div class="cta-row">
+        <button type="button" class="btn btn-primary" data-signup>Schrijf je in</button>
+        <a class="btn btn-ghost" href="#leaderboard">Bekijk leaderboard</a>
+      </div>
+      <p class="countdown" id="countdown" hidden>Start editie 05 over <span><b id="cd-d">0</b>d</span><span><b id="cd-h">00</b>u</span><span><b id="cd-m">00</b>m</span><span><b id="cd-s">00</b>s</span></p>
+      <p class="countdown" id="countdown-tbd">Editie 05 · datum volgt</p>
+    </div>
+    <div class="bib" aria-hidden="true">
+      <i></i><i></i><i></i><i></i>
+      <div class="row"><span>HYROX SIM</span><span id="bib-start">EDITIE</span></div>
+      <div class="num">05</div>
+      <div class="foot" id="bib-foot">EDITIE · DATUM VOLGT</div>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="Het event in cijfers">
+    <div class="wrap">
+      <div class="stat"><b>8 × 1 km</b><span>lopen tussen de stations</span></div>
+      <div class="stat"><b>8</b><span>stations, van SkiErg tot Wall Balls</span></div>
+      <div class="stat"><b>6</b><span>categorieën: solo, dubbel en relay</span></div>
+      <div class="stat"><b>HAL60</b><span>Roelofarendsveen</span></div>
+    </div>
+  </section>
+
+  <section class="section" id="parcours">
+    <div class="wrap">
+      <div class="section-head">
+        <div><span class="eyebrow">Parcours</span><h2 class="h-display h2">8 km. 8 stations.</h2></div>
+        <p>Na elke kilometer lopen volgt een station, altijd in deze volgorde. Wie als eerste door de finish komt na Wall Balls, wint.</p>
+      </div>
+      <ol class="stations">
+        <li><span class="st-top"><b>01</b><span>na 1 km lopen</span></span><h3>SkiErg</h3><span class="st-d">1000 m</span><span class="st-w">Eigen tempo, op de skiërg</span></li>
+        <li><span class="st-top"><b>02</b><span>na 2 km lopen</span></span><h3>Sled push</h3><span class="st-d">50 m</span><span class="st-w">152 kg / 102 kg incl. slee</span></li>
+        <li><span class="st-top"><b>03</b><span>na 3 km lopen</span></span><h3>Sled pull</h3><span class="st-d">50 m</span><span class="st-w">103 kg / 78 kg incl. slee</span></li>
+        <li><span class="st-top"><b>04</b><span>na 4 km lopen</span></span><h3>Burpee broad jumps</h3><span class="st-d">80 m</span><span class="st-w">Lichaamsgewicht</span></li>
+        <li><span class="st-top"><b>05</b><span>na 5 km lopen</span></span><h3>Roeien</h3><span class="st-d">1000 m</span><span class="st-w">Op de roeitrainer</span></li>
+        <li><span class="st-top"><b>06</b><span>na 6 km lopen</span></span><h3>Farmers carry</h3><span class="st-d">200 m</span><span class="st-w">2 × 24 kg / 2 × 16 kg</span></li>
+        <li><span class="st-top"><b>07</b><span>na 7 km lopen</span></span><h3>Sandbag lunges</h3><span class="st-d">100 m</span><span class="st-w">20 kg / 10 kg</span></li>
+        <li><span class="st-top"><b>08</b><span>na 8 km lopen</span></span><h3>Wall balls</h3><span class="st-d">100 herhalingen</span><span class="st-w">6 kg / 4 kg</span></li>
+      </ol>
+      <div class="relay-note"><span class="eyebrow">Relay</span><p>Teams van vier. Iedereen loopt 2 × 1 km en doet 2 stations: persoon 1 SkiErg en sled push, persoon 2 sled pull en burpee broad jumps, persoon 3 roeien en farmers carry, persoon 4 sandbag lunges en wall balls.</p></div>
+      <p class="note">Gewichten volgens de officiële Open-divisie (mannen / vrouwen). De organisatie bepaalt per editie de definitieve sim-gewichten en afstanden.</p>
+    </div>
+  </section>
+
+  <section class="section" id="programma" style="padding-top: 0">
+    <div class="wrap split">
+      <div>
+        <span class="eyebrow">Programma</span>
+        <h2 class="h-display h2" style="margin-top: 12px" id="prog-title">Editie 05</h2>
+        <ol class="timeline" id="timeline"></ol>
+        <p class="note" style="margin-top: 0" id="prog-note">Voorlopig programma. Je exacte heattijd krijg je een week van tevoren per mail.</p>
+      </div>
+      <div>
+        <span class="eyebrow">Categorieën</span>
+        <h3 class="h3" style="margin-top: 12px">Solo, met z'n tweeën of met je team</h3>
+        <div class="cats-grid">
+          <div class="cat-card"><span class="tag">Solo</span><h4>Single mannen</h4><p>Alles zelf: 8 km lopen en alle 8 stations.</p></div>
+          <div class="cat-card"><span class="tag">Solo</span><h4>Single vrouwen</h4><p>Alles zelf: 8 km lopen en alle 8 stations.</p></div>
+          <div class="cat-card"><span class="tag">Duo</span><h4>Mixed dubbel</h4><p>Een man en een vrouw. Samen lopen, de stations verdelen jullie zelf.</p></div>
+          <div class="cat-card"><span class="tag">Duo</span><h4>Mannen dubbel</h4><p>Twee mannen. Samen lopen, de stations verdelen jullie zelf.</p></div>
+          <div class="cat-card"><span class="tag">Duo</span><h4>Vrouwen dubbel</h4><p>Twee vrouwen. Samen lopen, de stations verdelen jullie zelf.</p></div>
+          <div class="cat-card"><span class="tag">Team van 4</span><h4>Relay</h4><p>Ieder loopt 2 × 1 km en doet 2 stations. Mannen, vrouwen of mixed.</p></div>
+          <div class="cat-card cta"><h4>Doe je mee?</h4><p>Leden van Club Confidence, By Opdam en gasten zijn welkom.</p><button type="button" class="btn btn-sm" data-signup>Schrijf je in</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section lb" id="leaderboard">
+    <div class="wrap">
+      <div class="section-head" style="margin-bottom: 0">
+        <div><span class="eyebrow" id="lb-eyebrow">Leaderboard</span><h2 class="h-display h2">Leaderboard</h2></div>
+        <div class="seg" role="group" aria-label="Soort race">
+          <button type="button" data-src="sim" aria-pressed="true">Sim Roelofarendsveen</button>
+          <button type="button" data-src="off" aria-pressed="false">Officiële Hyrox</button>
+        </div>
+      </div>
+      <div class="lb-controls">
+        <div class="ctrl"><label for="lb-event">Event</label><select id="lb-event" class="input"></select></div>
+        <div class="ctrl" id="ctrl-div" hidden><span>Divisie</span>
+          <div class="seg seg-sm" id="lb-div" role="group" aria-label="Divisie">
+            <button type="button" data-div="" aria-pressed="true">Alle</button>
+            <button type="button" data-div="open" aria-pressed="false">Open</button>
+            <button type="button" data-div="pro" aria-pressed="false">Pro</button>
+          </div>
+        </div>
+        <div class="ctrl"><label for="lb-club">Club</label>
+          <select id="lb-club" class="input"><option value="">Alle clubs</option><option>Club Confidence</option><option>By Opdam</option><option>Gast</option></select>
+        </div>
+        <div class="ctrl grow"><label for="lb-search">Zoek op naam</label><input id="lb-search" class="input" type="search" placeholder="Bijvoorbeeld Sanne" autocomplete="off"></div>
+      </div>
+      <div class="chips" id="lb-cats" role="group" aria-label="Categorie"></div>
+      <div class="lb-summary" id="lb-summary"></div>
+      <p class="sr-only" id="lb-status" role="status" aria-live="polite"></p>
+      <ol class="lb-list" id="lb-list" aria-label="Uitslag"></ol>
+      <div class="lb-cta">
+        <div><h3>Zet je eigen tijd erin</h3><p>Log in met je e-mailadres en je krijgt een code van zes cijfers. Daarna houd je je tijden zelf bij, ook die van Utrecht en Amsterdam.</p></div>
+        <button type="button" class="btn btn-primary" data-open-login>Tijd invoeren</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="fotos">
+    <div class="wrap">
+      <div class="section-head">
+        <div><span class="eyebrow">In beeld</span><h2 class="h-display h2">Vorige edities</h2></div>
+        <p>Foto's uit HAL60. Na elke editie komt hier het complete album.</p>
+      </div>
+      <div class="gallery">
+        <figure><img src="img/sandbag-bw.jpg" alt="Deelnemer met startnummer 347 bij de sandbag lunges, jury op de achtergrond" loading="lazy" style="object-position: 50% 70%"><figcaption>Sandbag lunges</figcaption></figure>
+        <figure><img src="img/lunge-color.jpg" alt="Deelnemer met startnummer 414 bij de sandbag lunges, publiek achter het lint" loading="lazy" style="object-position: 50% 60%"><figcaption>Publiek erbij</figcaption></figure>
+        <figure><img src="img/sledpush-bw.jpg" alt="Deelnemer duwt de slee, deelnemer 432 kijkt toe" loading="lazy" style="object-position: 45% 60%"><figcaption>Sled push</figcaption></figure>
+        <figure><img src="img/runners.jpg" alt="Twee lopers met startnummer 445" loading="lazy" style="object-position: 60% 58%"><figcaption>Run</figcaption></figure>
+        <figure><img src="img/sledpull-color.jpg" alt="Deelnemer trekt de slee aan het touw" loading="lazy" style="object-position: 55% 60%"><figcaption>Sled pull</figcaption></figure>
+        <figure><img src="img/rope-bw.jpg" alt="Close-up van benen en touw bij de sled pull" loading="lazy" style="object-position: 40% 50%"><figcaption>Grip</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" style="padding-top: 0">
+    <div class="wrap">
+      <div class="section-head"><div><span class="eyebrow">Vragen</span><h2 class="h-display h2">Goed om te weten</h2></div></div>
+      <div class="faq">
+        <details open><summary>Hoe zet ik mijn tijd op het leaderboard?</summary><p>Klik op Tijd invoeren en vul je e-mailadres in. Je krijgt een code van zes cijfers. Daarna kies je het event en je categorie en vul je je eindtijd in. Je staat er meteen op.</p></details>
+        <details><summary>Waarom een code en geen wachtwoord?</summary><p>Dan heb je geen wachtwoord om te vergeten. Elke keer dat je inlogt krijg je een nieuwe code. Op hetzelfde apparaat blijf je ingelogd.</p></details>
+        <details><summary>Wat betekent 'Geverifieerd'?</summary><p>Die tijd komt uit de tijdregistratie van de sim of is gecontroleerd door de organisatie. Tijden die je zelf invoert krijgen het label 'Zelf ingevoerd' tot ze gecontroleerd zijn.</p></details>
+        <details><summary>We liepen als duo of relayteam. Moet iedereen invoeren?</summary><p>Nee. Eén persoon voert de tijd in, met de naam van de partner of de namen van het team.</p></details>
+        <details><summary>Kan ik ook mijn tijd van Hyrox Utrecht of Amsterdam toevoegen?</summary><p>Ja. Kies Officiële Hyrox en voeg een link naar je officiële uitslag toe. Dan kan de organisatie je tijd verifiëren.</p></details>
+        <details><summary>Wat gebeurt er met mijn gegevens?</summary><p>Op het leaderboard staan alleen je naam, club en tijden. Je e-mailadres gebruiken we alleen om je in te loggen en is nergens zichtbaar. Wil je alles laten verwijderen? Verwijder je tijden onder Mijn tijden of mail de organisatie.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<main id="view-account" hidden>
+  <section class="section">
+    <div class="wrap">
+      <div class="acc-head">
+        <div><span class="eyebrow">Mijn tijden</span><h1 class="h-display h2" id="acc-hello">Hoi</h1><p class="muted" id="acc-mail" style="margin: 0"></p></div>
+        <div class="cta-row"><a class="btn btn-quiet btn-sm" href="#leaderboard">Naar leaderboard</a><button type="button" class="btn btn-quiet btn-sm" id="btn-logout">Uitloggen</button></div>
+      </div>
+      <div class="acc-stats" id="acc-stats"></div>
+      <div class="acc-grid">
+        <div>
+          <h2 class="h3">Mijn races</h2>
+          <ul class="entries" id="entry-list"></ul>
+        </div>
+        <form id="entry-form" class="card form" novalidate>
+          <h2 id="form-title">Tijd toevoegen</h2>
+          <fieldset>
+            <legend>Soort race</legend>
+            <div class="radio-row">
+              <label><input type="radio" name="f-src" id="f-src-sim" value="sim" checked> Sim Roelofarendsveen</label>
+              <label><input type="radio" name="f-src" id="f-src-off" value="off"> Officiële Hyrox</label>
+            </div>
+          </fieldset>
+          <div class="field"><label for="f-event">Event</label><select id="f-event" class="input"></select></div>
+          <div class="field" id="fw-div" hidden><label for="f-div">Divisie</label><select id="f-div" class="input"><option value="open">Open</option><option value="pro">Pro</option></select></div>
+          <div class="field"><label for="f-cat">Categorie</label><select id="f-cat" class="input"></select></div>
+          <div id="fw-partner" class="form" hidden>
+            <div class="field"><label for="f-pname">Naam partner</label><input id="f-pname" class="input" autocomplete="off" maxlength="60"></div>
+          </div>
+          <div id="fw-team" class="form" hidden>
+            <div class="field"><label for="f-team">Teamnaam</label><input id="f-team" class="input" autocomplete="off" maxlength="60" placeholder="Bijvoorbeeld De Sleeduwers"></div>
+            <div class="field"><label for="f-mate1">Teamgenoot 2</label><input id="f-mate1" class="input" autocomplete="off" maxlength="60"></div>
+            <div class="field"><label for="f-mate2">Teamgenoot 3</label><input id="f-mate2" class="input" autocomplete="off" maxlength="60"></div>
+            <div class="field"><label for="f-mate3">Teamgenoot 4</label><input id="f-mate3" class="input" autocomplete="off" maxlength="60"><small>Jij bent teamgenoot 1.</small></div>
+          </div>
+          <div class="field"><label for="f-time">Eindtijd</label><input id="f-time" class="input" inputmode="numeric" placeholder="1:12:05" autocomplete="off"><small>Uren:minuten:seconden, bijvoorbeeld 1:12:05 of 58:44.</small></div>
+          <div class="field" id="fw-link" hidden><label for="f-link">Link naar officiële uitslag (optioneel)</label><input id="f-link" class="input" type="url" placeholder="https://" autocomplete="off" maxlength="500"><small>Met een link kan de organisatie je tijd verifiëren.</small></div>
+          <p class="form-error" id="f-error" role="alert" hidden></p>
+          <div class="form-actions"><button type="submit" class="btn btn-primary" id="f-submit">Tijd opslaan</button><button type="button" class="btn btn-quiet" id="f-cancel" hidden>Annuleren</button></div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div><h4>Hyrox Sim Roelofarendsveen</h4><p>Een Hyrox-simulatie georganiseerd door twee clubs uit Roelofarendsveen. Locatie: HAL60.</p></div>
+    <div><h4>Club Confidence</h4><p>Cilinderweg 43-U16<br>2371 DZ Roelofarendsveen<br><a href="https://clubconfidence.nl/" target="_blank" rel="noopener">clubconfidence.nl</a></p></div>
+    <div><h4>By Opdam</h4><p>Pasteurweg 40<br>2371 DW Roelofarendsveen<br><a href="https://www.byopdam.nl/" target="_blank" rel="noopener">byopdam.nl</a></p></div>
+    <p class="fine">Hyrox Sim Roelofarendsveen is een simulatie van het Hyrox-format en geen officieel Hyrox-event.</p>
+  </div>
+</footer>
+
+<dialog id="login" aria-labelledby="login-title">
+  <div class="dlg">
+    <button type="button" class="dlg-close" id="login-close" aria-label="Sluiten"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div data-step="mail">
+      <span class="eyebrow">Inloggen</span>
+      <h2 class="h-display" id="login-title">Tijd invoeren</h2>
+      <p>Vul je e-mailadres in. Je krijgt een code van zes cijfers, een wachtwoord is niet nodig.</p>
+      <form id="form-mail" novalidate>
+        <label for="l-mail">E-mailadres</label>
+        <input id="l-mail" class="input" type="email" autocomplete="email" placeholder="jij@voorbeeld.nl">
+        <p class="form-error" id="l-mail-err" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit" id="l-mail-btn">Stuur mij een code</button>
+      </form>
+    </div>
+    <div data-step="code" hidden>
+      <span class="eyebrow">Stap 2 van 2</span>
+      <h2 class="h-display">Check je mail</h2>
+      <p>We hebben een code gestuurd naar <b id="l-mail-echo"></b>. De code is een uur geldig.</p>
+      <form id="form-code" novalidate>
+        <label for="l-code">Code uit je mail</label>
+        <input id="l-code" class="input code-input" inputmode="numeric" autocomplete="one-time-code" placeholder="······">
+        <p class="form-error" id="l-code-err" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit" id="l-code-btn">Inloggen</button>
+      </form>
+      <p class="mail-hint">Geen mail gezien? Kijk ook in je spam of ongewenste mail.</p>
+      <div class="dlg-links"><button type="button" class="linkbtn" id="l-resend">Nieuwe code sturen</button><button type="button" class="linkbtn" id="l-back">Ander e-mailadres</button></div>
+    </div>
+    <div data-step="profile" hidden>
+      <span class="eyebrow">Eerste keer</span>
+      <h2 class="h-display">Welkom!</h2>
+      <p>Vul één keer je naam en club in, dan weten we wie je bent op het leaderboard.</p>
+      <form id="form-profile" novalidate>
+        <label for="p-name">Naam zoals op het leaderboard</label>
+        <input id="p-name" class="input" autocomplete="name" placeholder="Voornaam Achternaam" maxlength="60">
+        <label for="p-club">Club</label>
+        <select id="p-club" class="input"><option>Club Confidence</option><option>By Opdam</option><option>Gast</option></select>
+        <p class="form-error" id="p-err" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit" id="p-btn">Naar mijn tijden</button>
+      </form>
+      <div class="dlg-links"><button type="button" class="linkbtn" id="p-switch">Ander e-mailadres gebruiken</button></div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

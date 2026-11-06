@@ -1,0 +1,12 @@
+{
+  "name": "hyrox-sim-site-tests",
+  "private": true,
+  "description": "Browser test of the site against a fake Supabase client. Serve the site folder first, then run: node e2e.js http://127.0.0.1:8765/",
+  "scripts": { "test": "node e2e.js http://127.0.0.1:8765/" },
+  "devDependencies": {
+    "@fontsource/archivo": "^5.0.0",
+    "@fontsource/big-shoulders-display": "^5.0.0",
+    "@fontsource/ibm-plex-mono": "^5.0.0",
+    "playwright": "^1.47.0"
+  }
+}

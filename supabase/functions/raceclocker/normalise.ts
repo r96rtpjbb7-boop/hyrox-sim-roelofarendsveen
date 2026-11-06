@@ -1,13 +1,13 @@
 // Turns the public RaceClocker results JSON (https://raceclocker.com/<id>?JSON=1)
 // into the format the site shows. Pure logic, no network: also tested with Node.
 //
-// RaceClocker gives one record per participant (plus a header row first). Times are
+// RaceClocker gives one record per participant (some races start with a header row). Times are
 // clock times in Europe/Amsterdam. Laps: lap 0 is the start, laps 1-16 are run 1,
 // station 1, run 2, ... station 8. A segment time is the difference between two laps.
 
 // Raise when the payload changes: the edge function then refetches instead of serving
 // a cached payload in the old format.
-export const VERSION = 3;
+export const VERSION = 4;
 export const SEGMENTS = 16;
 export const TZ = 'Europe/Amsterdam';
 // With more than 16 laps, a lap within this many ms after the previous one is a double tap.
@@ -189,8 +189,16 @@ export function normalise(raw: any[], race: string, event: string, now = Date.no
   for (const p of Array.isArray(raw) ? raw : []) {
     const bib = clean(p?.['Bib number']);
     const name = clean(p?.Name);
-    if (!/^\d+$/.test(bib)) continue; // header row ("Startnummer")
+    const timed = Array.isArray(p?.Laps) && p.Laps.length > 0;
+    if (!/^\d+$/.test(bib)) {
+      // A header row ("Startnummer") is left out quietly. Laps without a bib number cannot be
+      // linked to anyone: left out, but listed so the organisers can fix it in RaceClocker.
+      if (!bib && timed) skipped.push({ bib, name, reason: 'geen startnummer' });
+      continue;
+    }
     if (!name || /^test\b/i.test(name)) { skipped.push({ bib, name, reason: 'testdeelnemer' }); continue; }
+    // RaceClocker's name for a bib that was tapped but is not on the start list.
+    if (/^unknown$/i.test(name)) { skipped.push({ bib, name, reason: 'onbekende deelnemer, naam ontbreekt in RaceClocker' }); continue; }
     // deno-lint-ignore no-explicit-any
     const laps = (Array.isArray(p.Laps) ? p.Laps : []).map((l: any) => ({
       n: parseInt(String(l?.LapNumber ?? ''), 10),

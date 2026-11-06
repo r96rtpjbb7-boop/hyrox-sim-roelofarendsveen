@@ -37,6 +37,20 @@ const RC_ARCHIVE = () => ({
   ],
   skipped: [], issues: [], stats: {}
 });
+// Edition 02 for the all-time board: some of the same people, two of them faster than in 03.
+const RC_ARCHIVE2 = () => ({
+  v: 4, race: '0839eb85', event: 'sim-02', date: '2026-03-15', live: false, fetched_at: new Date().toISOString(),
+  entries: [
+    rcEntry({ bib: '351', name: 'Snelle Sander', cat: 'single_men', total: 4000 }),
+    rcEntry({ bib: '352', name: 'Gelijke Gijs', cat: 'single_men', total: 3800 }),
+    rcEntry({ bib: '353', name: 'Oude Otto', cat: 'single_men', total: 4200 }),
+    rcEntry({ bib: '354', name: 'Jeroen de Vries', cat: 'single_men', total: 4250 }),
+    rcEntry({ bib: '355', name: 'Uitvaller Uri', cat: 'single_men', status: 'dnf', laps: 7, splits: SEGS.slice(0, 7) }),
+    rcEntry({ bib: '356', name: 'Vera Vrouw', cat: 'single_women', total: 4400 }),
+    rcEntry({ bib: '361', name: 'Bea Snel & Anna Snel', cat: 'doubles_women', total: 4700 })
+  ],
+  skipped: [], issues: [], stats: {}
+});
 // Race day of edition 04: stage 1 has two athletes on the course, from stage 2 on one of them is in.
 function RC_LIVE(stage) {
   const now = Date.now(), start = now - 40 * 60e3, early = now - 70 * 60e3;
@@ -64,8 +78,8 @@ async function setup(ctx, errs, tag) {
     const m = r.request().url().match(/local\/([^/]+)\/([^/?]+)/);
     r.fulfill({ status: 200, contentType: 'font/woff2', body: fs.readFileSync(path.join(FS, m[1], 'files', m[2])) });
   });
-  // The edge function: archive results for edition 03, live results for a race 'abcd1234'.
-  ctx.rc = { calls: [], fail: false, payload: url => (/abcd1234/.test(url) ? RC_LIVE(ctx.rc.calls.filter(u => /abcd1234/.test(u)).length) : RC_ARCHIVE()) };
+  // The edge function: archive results for editions 02 and 03, live results for a race 'abcd1234'.
+  ctx.rc = { calls: [], fail: false, payload: url => (/abcd1234/.test(url) ? RC_LIVE(ctx.rc.calls.filter(u => /abcd1234/.test(u)).length) : /0839eb85/.test(url) ? RC_ARCHIVE2() : RC_ARCHIVE()) };
   await ctx.route(/\/functions\/v1\/raceclocker/, r => {
     const url = r.request().url();
     ctx.rc.calls.push(url);
@@ -136,7 +150,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await p.click('[data-cat="single_men"]');
   await p.waitForSelector('#lb-list .lb-row');
   check('rejected time hidden on sim-03', !(await p.textContent('#lb-list')).includes('Afgekeurde Tijd') && (await p.$$eval('#lb-list .lb-row', e => e.length)) === 6);
-  await p.selectOption('#lb-event', 'sim-01');
+  await p.selectOption('#lb-event', 'sim-02');
   await p.waitForSelector('#lb-list .lb-empty');
   check('empty edition shows invite', (await p.textContent('#lb-list')).includes('Nog geen tijden'));
   await p.click('[data-src="off"]');
@@ -349,6 +363,12 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   check('date-only bib shows edition', (await c.textContent('#bib-start')) === 'EDITIE 04', await c.textContent('#bib-start'));
   check('signup buttons become links', (await c.$$eval('a.btn[href="https://example.com/inschrijven"][target="_blank"][rel="noopener"]', e => e.length)) === 2 && (await c.$$eval('[data-signup]', e => e.length)) === 0);
   await c.screenshot({ path: 'site-desk-top.png' });
+  // All-time without official timing: the self-reported times of every edition, best per person
+  await c.selectOption('#lb-event', 'all');
+  await c.waitForSelector('[data-row^="at-"]');
+  const selfAt = await c.$$eval('#lb-list .lb-row', rows => rows.map(x => ({ nm: x.querySelector('.nm').textContent, meta: x.querySelector('.meta').textContent })));
+  check('all-time (self-reported): one row per person, someone with two editions once', selfAt.length === 6 && selfAt[0].nm === 'Jeroen de Vries' && selfAt[0].meta.startsWith('Editie 03') && selfAt[0].meta.includes('2 edities') && selfAt.filter(x => x.nm === 'Jeroen de Vries').length === 1, selfAt);
+  check('all-time (self-reported): one query for all editions', (await c.evaluate(() => window.__calls.filter(x => x.t === 'leaderboard' && x.filters.some(f => f[2] === 'in')).map(x => x.filters[0][1].join(',')))).includes('sim-03,sim-02,sim-01'));
   // Without signup link: toast
   await p.goto(BASE);
   await p.waitForSelector('#lb-list .lb-row');
@@ -378,9 +398,9 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await e.fill('#p-name', 'Live Test');
   await e.click('#p-btn');
   await e.waitForSelector('#view-account:not([hidden])');
-  check('form offers neither edition 04 (not raced yet) nor 03 (official timing)', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 02', 'Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
+  check('form offers neither edition 04 (not raced yet) nor 02 and 03 (official timing)', JSON.stringify(await e.$$eval('#f-event option', o => o.map(x => x.textContent))) === JSON.stringify(['Editie 01']), await e.$$eval('#f-event option', o => o.map(x => x.textContent)));
   check('form has no Kids category', !(await e.$$eval('#f-cat option', o => o.map(x => x.value))).includes('kids'));
-  check('empty list suggests the latest edition you can fill in', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 02'), await e.textContent('#entry-list'));
+  check('empty list suggests the latest edition you can fill in', (await e.textContent('#entry-list')).includes('bijvoorbeeld van editie 01'), await e.textContent('#entry-list'));
   await ctx3.close();
 
   // Official timing (RaceClocker): edition 03 from the real config
@@ -430,7 +450,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await r.click('[data-row="rc-401"]');
   check('RC: kids show the total only', (await r.textContent('#sp-rc401 .sp-sum')) === 'Bij de kids telt alleen de eindtijd.' && (await r.textContent('[data-row="rc-401"] .tm')) === '0:19:10');
   check('RC: only the category switch, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
-  await r.selectOption('#lb-event', 'sim-02');
+  await r.selectOption('#lb-event', 'sim-01');
   await r.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
   const chips2 = await r.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.trim()));
   check('RC: other edition back to self-reported: club filter, no counts, no Kids', await r.isVisible('#lb-club') && chips2.length === 6 && chips2[0] === 'Single mannen' && (await r.$eval('#lb-cats [aria-pressed="true"]', x => x.dataset.cat)) === 'single_men', chips2);
@@ -438,6 +458,44 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await r.waitForSelector('[data-row="rc-101"]');
   check('RC: back to edition 03 from memory, no new request', ctxR.rc.calls.length === 1, ctxR.rc.calls.length);
   await ctxR.close();
+
+  // All-time: editions 02 and 03 from RaceClocker, edition 01 self-reported, best time per person
+  const ctxA = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
+  await setup(ctxA, errs, 'alltime');
+  const A = await ctxA.newPage();
+  await A.goto(BASE);
+  await A.waitForSelector('[data-row="rc-101"]');
+  await A.addStyleTag({ content: 'html{scroll-behavior:auto!important}' });
+  const atOpts = await A.$$eval('#lb-event option', o => o.map(x => x.value + '=' + x.textContent));
+  check('all-time: first option, above the editions', JSON.stringify(atOpts) === JSON.stringify(['all=All-time · alle edities', 'sim-03=Editie 03', 'sim-02=Editie 02', 'sim-01=Editie 01']), atOpts);
+  await A.selectOption('#lb-event', 'all');
+  await A.waitForSelector('[data-row^="at-"]');
+  const atRows = await A.$$eval('#lb-list .lb-row', rows => rows.map(x => ({ rk: x.querySelector('.rk').textContent, nm: x.querySelector('.nm').textContent, tm: x.querySelector('.tm').textContent, meta: x.querySelector('.meta').textContent })));
+  check('all-time: best time per person over all editions, ranked', JSON.stringify(atRows.map(x => [x.rk, x.nm, x.tm])) === JSON.stringify([['01', 'Gelijke Gijs', '1:03:20'], ['02', 'Snelle Sander', '1:05:00'], ['03', 'Gelijke Gert', '1:08:20'], ['04', 'Oude Otto', '1:10:00'], ['05', 'Jeroen de Vries', '1:10:50'], ['06', 'Gemiste Gerrit', '1:15:00']]), atRows.map(x => [x.rk, x.nm, x.tm]));
+  check('all-time: edition of the best time, official badge, how many editions', /^Editie 02.*Officiële tijd.*2 edities$/.test(atRows[0].meta) && /^Editie 03/.test(atRows[1].meta) && !/edities/.test(atRows[2].meta), atRows.map(x => x.meta));
+  check('all-time: edition 02 fetched once, edition 03 reused', ctxA.rc.calls.length === 2 && /race=0839eb85/.test(ctxA.rc.calls[1]), ctxA.rc.calls);
+  check('all-time: self-reported editions in one query', (await A.evaluate(() => window.__calls.filter(x => x.t === 'leaderboard' && x.filters.some(f => f[2] === 'in')).map(x => x.filters[0][1].join(',')))).includes('sim-01'));
+  const atChips = await A.$$eval('#lb-cats .chip', c => c.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  check('all-time: counts per category, Kids from edition 03', JSON.stringify(atChips) === JSON.stringify(['Single mannen 6', 'Single vrouwen 1', 'Mixed dubbel 0', 'Mannen dubbel 0', 'Vrouwen dubbel 1', 'Relay 1', 'Kids 2']), atChips);
+  const atTiles = (await A.textContent('#lb-summary')).replace(/\s+/g, ' ');
+  check('all-time: summary with participants, fastest time, average and editions', /Deelnemers\s*6/.test(atTiles) && /Snelste tijd\s*1:03:20 editie 02/.test(atTiles) && /Gemiddeld\s*1:08:45/.test(atTiles) && /Edities\s*3 01, 02 en 03/.test(atTiles), atTiles);
+  check('all-time: eyebrow, no club filter, search by name', (await A.textContent('#lb-eyebrow')) === 'Sim Roelofarendsveen · All-time · Single mannen' && await A.isHidden('#lb-club') && (await A.getAttribute('#lb-search', 'placeholder')) === 'Naam', await A.textContent('#lb-eyebrow'));
+  await A.click('[data-row="at-sim-03-rc-101"]');
+  check('all-time: detail has the lap times of the best race and every edition', (await A.$$eval('#sp-atsim03rc101 .sp b', x => x.length)) === 16 && (await A.textContent('#sp-atsim03rc101 .at-history')) === 'Alle edities: Editie 02 1:06:40 · Editie 03 1:05:00. De snelste telt.', await A.textContent('#sp-atsim03rc101 .at-history'));
+  await A.click('[data-row="at-sim-02-rc-354"]');
+  check('all-time: self-reported edition 01 and official edition 02 of the same person', (await A.textContent('#sp-atsim02rc354 .at-history')) === 'Alle edities: Editie 01 1:11:40 · Editie 02 1:10:50. De snelste telt.', await A.textContent('#sp-atsim02rc354 .at-history'));
+  await A.$eval('#lb-summary', x => x.scrollIntoView());
+  await A.screenshot({ path: 'site-alltime-lb.png' });
+  await A.fill('#lb-search', 'gert');
+  check('all-time: search by name', (await A.$$eval('#lb-list .lb-row', x => x.length)) === 1 && (await A.textContent('#lb-list .nm')) === 'Gelijke Gert');
+  await A.fill('#lb-search', '');
+  await A.click('[data-cat="doubles_women"]');
+  await A.waitForSelector('[data-row="at-sim-02-rc-361"]');
+  check('all-time: a duo in the other order is the same duo', (await A.$$eval('#lb-list .lb-row', x => x.length)) === 1 && (await A.textContent('[data-row="at-sim-02-rc-361"] .tm')) === '1:18:20' && (await A.textContent('[data-row="at-sim-02-rc-361"] .meta')).includes('2 edities'));
+  await A.selectOption('#lb-event', 'sim-03');
+  await A.waitForSelector('[data-row="rc-201"]');
+  check('all-time: back to edition 03 without new requests', ctxA.rc.calls.length === 2, ctxA.rc.calls.length);
+  await ctxA.close();
 
   // A fresh stored copy is used as is; a stale one is refreshed; if that fails the stored copy stays.
   const ctxS = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
@@ -470,7 +528,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   await ctxL.route(/assets\/config\.js/, async rt => {
     const resp = await rt.fetch(); let body = await resp.text();
     body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '" + new Date(Date.now() - 60e3).toISOString() + "'")
-      .replace("raceclocker: { 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
+      .replace("raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
     rt.fulfill({ response: resp, body });
   });
   const L = await ctxL.newPage();
@@ -497,7 +555,7 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   check('live: no horizontal scroll', sw3 <= 1280, sw3);
   await L.$eval('#leaderboard', e => e.scrollIntoView());
   await L.screenshot({ path: 'site-live-lb.png' });
-  await L.selectOption('#lb-event', 'sim-02');
+  await L.selectOption('#lb-event', 'sim-01');
   await L.waitForSelector('#lb-list .lb-empty, #lb-list .lb-row');
   const n1 = ctxL.rc.calls.length;
   await wait(L, 3200);

@@ -2,7 +2,9 @@
 
 De site van de Hyrox-simulatie van Club Confidence en By Opdam. Bezoekers zien de leaderboards per editie en voor de officiële Hyrox-events. Deelnemers loggen in met een code van zes cijfers die ze per mail krijgen, en houden daarna zelf hun tijden bij.
 
-Edities met officiële tijdwaarneming in RaceClocker (vanaf editie 03) staan er met de uitslag uit RaceClocker, inclusief alle rondetijden. Op de racedag is die uitslag live te volgen.
+Edities met officiële tijdwaarneming in RaceClocker (editie 02 en 03) staan er met de uitslag uit RaceClocker, inclusief alle rondetijden. Op de racedag is die uitslag live te volgen.
+
+Bovenaan de keuzelijst met edities staat **All-time**: alle edities samen, per categorie, met per deelnemer (of duo of team) de beste tijd en de editie waarin die is gelopen. Edities met RaceClocker tellen met de officiële tijd, de andere met de zelf ingevoerde tijden. Deelnemers worden op naam herkend; een duo telt als hetzelfde duo in welke volgorde de namen ook staan.
 
 De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap. Database en inloggen draaien bij Supabase.
 
@@ -28,7 +30,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
   - `start`: alleen de datum (`'2027-03-14'`, de site toont dan "nog 128 dagen") of de datum met de starttijd van de eerste heat (`'2027-03-14T08:00:00+01:00'`, dan komt er een aftelklok tot op de seconde). Met `null` toont de site "datum volgt".
 - `signupUrl`: link naar het inschrijfformulier. Met `null` geven de inschrijfknoppen een melding dat de inschrijving binnenkort opent.
 - `programme`: het tijdschema. Een lege lijst (`[]`) toont "programma volgt".
-- `raceclocker`: per editie de code van de race in RaceClocker, bijvoorbeeld `{ 'sim-03': 'f4b23f3b' }` voor raceclocker.com/f4b23f3b. Zie RaceClocker hieronder.
+- `raceclocker`: per editie de code van de race in RaceClocker, bijvoorbeeld `{ 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' }` voor raceclocker.com/0839eb85 en raceclocker.com/f4b23f3b. Zie RaceClocker hieronder.
 - `codeLength` (optioneel, standaard 6): moet gelijk zijn aan "Email OTP Length" in Supabase.
 
 ## Supabase
@@ -83,14 +85,14 @@ RaceClocker deelt de uitslag van een race openbaar als data: `https://raceclocke
 - De edge function `raceclocker` (`supabase/functions/raceclocker/`) haalt die data op, rekent de rondetijden uit en bewaart het resultaat in `raceclocker_cache`. Op de racedag haalt hij hooguit elke 15 seconden een nieuwe versie, op andere dagen hooguit elk uur.
 - De site leest eerst de bewaarde versie uit de database en vraagt de function alleen om een nieuwe als die te oud is. Op de racedag ververst de site elke 20 seconden zolang de pagina open staat, met een blok "Nu op het parcours", een lopende klok per deelnemer en nieuwe finishers die oplichten.
 - Rondes die niet goed getikt zijn, worden niet verzonnen. Een ronde die niet in de volgorde past, of twee tikken binnen 20 seconden (een gemiste tik die is ingehaald), maken de losse tijden van die onderdelen onbekend; de site toont dan hun tijd samen. De eindtijd blijft gewoon staan.
-- Deelnemers met rondes op een andere dag dan de racedag (een test van de tijdwaarneming) en deelnemers die `test` heten, laat de function weg. Straftijd telt mee in de eindtijd, met de reden erbij.
+- Deelnemers met rondes op een andere dag dan de racedag (een test van de tijdwaarneming), deelnemers die `test` heten en tikken zonder bekende deelnemer (`Unknown` of geen startnummer) laat de function weg. Straftijd telt mee in de eindtijd, met de reden erbij.
 - Kids lopen een eigen, korter format: daar staat alleen de eindtijd.
 - Wat de function overslaat of vreemd vindt, staat in de bewaarde versie onder `skipped` en `issues`. Bekijk dat in de SQL Editor met `select payload->'skipped', payload->'issues' from raceclocker_cache;`.
 
 **Nieuwe editie koppelen**, bijvoorbeeld editie 04:
 
 1. Maak de race aan in RaceClocker en noteer de code uit de link (raceclocker.com/**abcd1234**).
-2. Zet in `supabase/functions/raceclocker/index.ts` bij `RACES` een regel `abcd1234: { event: 'sim-04', date: '2027-03-14' },` en deploy de function opnieuw.
+2. Zet in `supabase/functions/raceclocker/index.ts` bij `RACES` een regel `abcd1234: { event: 'sim-04', date: '2027-03-14' },` en deploy de function opnieuw. De datum is de dag waarop de rondes getikt zijn; de kop van de RaceClocker-pagina kan een andere datum tonen (bij editie 02 zaterdag 14 maart, terwijl er op zondag 15 maart is gelopen).
 3. Zet in `assets/config.js` bij `raceclocker` de regel `'sim-04': 'abcd1234'` erbij.
 
 Vanaf dan is editie 04 niet meer zelf in te vullen en toont het leaderboard de RaceClocker-uitslag; op de racedag live. In RaceClocker moet de categorie van een deelnemer in de kolom Gender staan (Single Men, Duo Women, Mixed Duo, Relay, Kids, enzovoort), net als bij editie 03.

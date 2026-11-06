@@ -17,6 +17,8 @@ import { normalise, VERSION, ymd } from './normalise.ts';
 // race day (Amsterdam). On race day the results are refreshed every 15 seconds.
 // Add the race of a new edition here and in assets/config.js (raceclocker).
 const RACES: Record<string, { event: string; date: string }> = {
+  // RaceClocker's page says Saturday 14 March, but all laps were tapped on Sunday the 15th.
+  '0839eb85': { event: 'sim-02', date: '2026-03-15' }, // Hyrox sim. Roelofarendsveen editie 2
   f4b23f3b: { event: 'sim-03', date: '2026-10-18' }, // Hyrox sim. Roelofarendsveen #3
 };
 

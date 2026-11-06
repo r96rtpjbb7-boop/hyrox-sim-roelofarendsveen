@@ -27,11 +27,11 @@ const cumAt = k => S0 + sum(full.slice(0, k)); // clock second of lap k with the
 
 const raw = [
   { Name: 'Naam (1)', Rank: '1', 'Bib number': 'Startnummer', Age: 'Leeftijdscategorie', Gender: 'Divisie ', Wave: 'Wave nummer ' },
-  person({ bib: '335', name: 'Karlijn Borst & Nina  Pfelzer ', gender: 'Duo Women', segs: full }),
-  person({ bib: '336', name: 'Chrissie Klein & Cheryl van der Hoorn', gender: 'Duo Woman', segs: full.map(s => s + 10) }),
-  person({ bib: '427', name: 'Jenny de Keizer-Lei', gender: 'Single Woman', age: '16-34', segs: full.slice(0, 9) }),
+  person({ bib: '335', name: 'Anna Eerst & Bea  Tweede ', gender: 'Duo Women', segs: full }),
+  person({ bib: '336', name: 'Cora Derde & Dina van der Vierde', gender: 'Duo Woman', segs: full.map(s => s + 10) }),
+  person({ bib: '427', name: 'Els de Proef-Loper', gender: 'Single Woman', age: '16-34', segs: full.slice(0, 9) }),
   // Like bib 001 in edition 3: a test run the day before, lap 0 later moved to race day 17:00.
-  person({ bib: '001', name: 'Michel Opdam', gender: 'Man', wave: 'Wave nummer', startS: 17 * 3600, lapDate: '2026-10-17', segs: full }),
+  person({ bib: '001', name: 'Org Testrit', gender: 'Man', wave: 'Wave nummer', startS: 17 * 3600, lapDate: '2026-10-17', segs: full }),
   person({ bib: '423', name: 'Piet, Jan, Kees & Klaas', gender: 'Relay', segs: full, penalty: '30', note: 'no-rep wall balls' }),
   person({ bib: '498', name: 'test', gender: 'Kids', segs: full }),
   person({ bib: '200', name: 'Piet Snel', gender: 'Single Men', segs: [...full, 5] }),
@@ -39,7 +39,7 @@ const raw = [
   person({ bib: '202', name: 'Ali Mixed & Bo Mixed', gender: 'Mixed Duo', segs: full }),
   person({ bib: '203', name: 'Raar Ding', gender: 'Divisie X', segs: full }),
   // Like bib 348: lap 12 tapped 18 s before lap 11.
-  person({ bib: '348', name: 'Tenika & Marinde', gender: 'Duo Women', segs: full, at: { 12: cumAt(11) - 18 } }),
+  person({ bib: '348', name: 'Fenna & Greet', gender: 'Duo Women', segs: full, at: { 12: cumAt(11) - 18 } }),
   // One lap tapped far too late (after the finish): only that lap drops out.
   person({ bib: '204', name: 'Uitschieter', gender: 'Single Men', segs: full, at: { 5: cumAt(16) + 600 } }),
   // A tap missed at the end of station 4, made up for with a double tap at the end of run 5 (16 laps).
@@ -62,7 +62,7 @@ check('header row skipped, test entry skipped', !by('Startnummer') && !by('498')
 check('laps on another day: skipped as a test, not ranked', !by('001') && out.skipped.some(s => s.bib === '001' && /2026-10-17/.test(s.reason)), out.skipped);
 check('race day as configured', out.date === DAY && out.live === false, out.date);
 const kb = by('335');
-check('duo: names split and cleaned', kb.name === 'Karlijn Borst & Nina Pfelzer' && kb.names.join('|') === 'Karlijn Borst|Nina Pfelzer', kb.names);
+check('duo: names split and cleaned', kb.name === 'Anna Eerst & Bea Tweede' && kb.names.join('|') === 'Anna Eerst|Bea Tweede', kb.names);
 check('duo: category from "Gender"', kb.cat === 'doubles_women' && by('336').cat === 'doubles_women' && by('202').cat === 'doubles_mixed');
 check('finished: 16 splits that add up to the total', kb.status === 'finished' && kb.splits.length === 16 && sum(kb.splits) === kb.total && kb.total === sum(full) && !kb.merged, { total: kb.total, splits: kb.splits });
 check('tenths of the start are taken into account', by('336').total === sum(full) + 160, by('336').total);
@@ -134,6 +134,17 @@ const idle = normalise(raw, 'f4b23f3b', 'sim-03', Date.parse('2026-10-18T09:00:0
 check('on race day: no lap for 40 minutes = dnf, no first lap after 30 minutes = dns', idle.entries.find(e => e.bib === '427').status === 'dnf' && idle.entries.find(e => e.bib === '201').status === 'dns');
 const early = normalise(raw, 'f4b23f3b', 'sim-03', Date.parse('2026-10-18T06:10:00Z'), DAY); // 08:10, wave 1 started 08:01
 check('just started, no lap yet = running', early.entries.find(e => e.bib === '201').status === 'running');
+
+// Like edition 2: no header row, laps without a bib number, and a bib RaceClocker calls "Unknown".
+const D2 = '2026-03-15';
+const e2 = normalise([
+  person({ bib: '351', name: 'Eerste Rij', gender: 'Duo women ', date: D2, segs: full }),
+  person({ bib: '', name: 'Unknown', gender: '', date: D2, segs: full.slice(0, 3) }),
+  person({ bib: '394', name: 'Unknown', gender: 'Single Men', date: D2, segs: full }),
+], '0839eb85', 'sim-02', now, D2);
+check('no header row: the first record is a participant', e2.entries.length === 1 && e2.entries[0].bib === '351' && e2.entries[0].cat === 'doubles_women' && e2.entries[0].status === 'finished', e2.entries.map(e => e.bib));
+check('laps without a bib number: left out and listed', e2.skipped.some(s => s.bib === '' && s.reason === 'geen startnummer'), e2.skipped);
+check('"Unknown" participant: left out and listed', e2.skipped.some(s => s.bib === '394' && /onbekende deelnemer/.test(s.reason)), e2.skipped);
 
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

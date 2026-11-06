@@ -51,6 +51,8 @@
     res(null, 'sim-03', 'single_men', 2400, { athlete_name: 'Afgekeurde Tijd', athlete_club: 'Gast', status: 'rejected' });
     db.profiles.slice(0, 6).forEach(function (p, i) { res(p, 'off-amsterdam', 'single_men', 3660 + i * 200, { division: i % 3 === 0 ? 'pro' : 'open', proof_url: 'https://results.hyrox.com/' }); });
     db.profiles.slice(10, 13).forEach(function (p, i) { res(p, 'off-utrecht', 'single_women', 4200 + i * 220, { division: 'open' }); });
+    // Edition 01 has no official timing: a self-reported time of someone who also raced later.
+    res(db.profiles[0], 'sim-01', 'single_men', 4300, { status: 'verified', splits: null });
     return db;
   }
   function loadDB() { try { var d = JSON.parse(localStorage.getItem(LS_DB)); if (d && d.events) return d; } catch (e) {} var s = seed(); localStorage.setItem(LS_DB, JSON.stringify(s)); return s; }
@@ -82,6 +84,7 @@
   function Q(t) { this.t = t; this.op = 'select'; this.filters = []; this.ord = null; this.mode = null; this.payload = null; this.opts = null; }
   Q.prototype.select = function () { return this; };
   Q.prototype.eq = function (c, v) { this.filters.push([c, v]); return this; };
+  Q.prototype.in = function (c, v) { this.filters.push([c, v, 'in']); return this; };
   Q.prototype.order = function (c, o) { this.ord = [c, !o || o.ascending !== false]; return this; };
   Q.prototype.maybeSingle = function () { this.mode = 'maybe'; return this; };
   Q.prototype.single = function () { this.mode = 'single'; return this; };
@@ -89,7 +92,7 @@
   Q.prototype.update = function (row) { this.op = 'update'; this.payload = row; return this; };
   Q.prototype.delete = function () { this.op = 'delete'; return this; };
   Q.prototype.then = function (a, b) { return this.run().then(a, b); };
-  Q.prototype.match = function (r) { return this.filters.every(function (f) { return r[f[0]] === f[1]; }); };
+  Q.prototype.match = function (r) { return this.filters.every(function (f) { return f[2] === 'in' ? f[1].indexOf(r[f[0]]) >= 0 : r[f[0]] === f[1]; }); };
   Q.prototype.out = function (rows) {
     if (this.mode === 'maybe') return rows.length > 1 ? err('JSON object requested, multiple (or no) rows returned', 'PGRST116') : { data: rows[0] || null, error: null };
     if (this.mode === 'single') return rows.length === 1 ? { data: rows[0], error: null } : err('JSON object requested, multiple (or no) rows returned', 'PGRST116');

@@ -59,7 +59,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
      <p>De code is een uur geldig. Heb je niets aangevraagd? Dan kun je deze mail negeren.</p>
      <p>Hyrox Sim Roelofarendsveen · Club Confidence × By Opdam</p>
      ```
-2. **Adres van de site.** Authentication, URL Configuration, Site URL: het webadres waar de site komt te staan.
+2. **Adres van de site.** Authentication, URL Configuration, Site URL: het webadres waar de site komt te staan. De site geeft bij elke inlogmail zijn eigen adres mee, zodat een link in de mail altijd op de site uitkomt. Supabase accepteert dat adres alleen als het op hetzelfde domein staat als de Site URL. Verhuist de site naar een eigen domein, pas dan meteen ook de Site URL aan.
 3. **Eigen mailverzending.** De ingebouwde mail van Supabase stuurt alleen naar leden van het Supabase-team en maar een paar mails per uur. Voor echte deelnemers: Authentication, Emails, SMTP Settings, met een dienst als Brevo of Resend en een afzender op een eigen domein (daar horen een paar DNS-records bij).
 4. **Ruimere limiet.** Authentication, Rate Limits: zet het aantal mails per uur na stap 3 hoger, bijvoorbeeld 100.
 5. **Optioneel**: plak `supabase/tests/security_test.sql` in de SQL Editor en klik Run. De uitkomst staat in de melding `TEST SUMMARY`.
@@ -81,8 +81,10 @@ Een gratis Supabase-project wordt gepauzeerd na een week zonder verkeer. Daarom 
 
 `tests/e2e.js` test de hele site in Chromium tegen `tests/fake-supabase.js`, een nep-Supabase met voorbeelddata. Inlogcode in de test: `424242`.
 
+`tests/login-real.js` test het inloggen met de echte supabase-js (dezelfde versie als in `index.html`) tegen een nagebootste Supabase-server: de inlogmail verwijst terug naar de site, de link uit de mail logt in en vraagt om je naam, en een verlopen link geeft een nette melding.
+
 ```bash
 cd tests && npm install
 cd .. && python3 -m http.server 8765 &
-cd tests && node e2e.js http://127.0.0.1:8765/
+cd tests && npm test
 ```

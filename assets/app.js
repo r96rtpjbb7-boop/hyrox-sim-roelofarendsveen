@@ -44,6 +44,12 @@
     sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   } catch (e) { console.error('Supabase niet beschikbaar', e); }
 
+  // Where the link in the login mail should land: this page, without query or hash.
+  // Without it Supabase falls back to the Referer header, which browsers cut down to the
+  // bare domain (https://…github.io/), and on GitHub Pages that is a 404 instead of the site.
+  // Supabase accepts it as long as it is on the same domain as the Site URL.
+  function pageUrl() { return /^https?:$/.test(location.protocol) ? location.origin + location.pathname : undefined; }
+
   var api = {
     events: function () { return sb.from('events').select('*').order('sort_order', { ascending: true }); },
     board: function (ev, cat) { return sb.from('leaderboard').select('*').eq('event_id', ev).eq('category', cat).order('total_seconds', { ascending: true }); },
@@ -53,7 +59,7 @@
     addResult: function (row) { return sb.from('results').upsert(row, { onConflict: 'user_id,event_id,category' }).select().single(); },
     updateResult: function (id, row) { return sb.from('results').update(row).eq('id', id).select().single(); },
     deleteResult: function (id) { return sb.from('results').delete().eq('id', id); },
-    sendCode: function (email) { return sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } }); },
+    sendCode: function (email) { return sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true, emailRedirectTo: pageUrl() } }); },
     verifyCode: function (email, token) { return sb.auth.verifyOtp({ email: email, token: token, type: 'email' }); },
     signOut: function () { return sb.auth.signOut(); },
     session: function () { return sb.auth.getSession(); }
@@ -61,7 +67,15 @@
 
   function nlError(err) {
     var m = String((err && (err.message || err.error_description)) || '') + ' ' + String((err && (err.code || err.status)) || '');
-    if (/rate limit|over_email_send_rate_limit|429|security purposes/i.test(m)) return 'Er zijn net te veel codes aangevraagd. Wacht een minuut en probeer het opnieuw.';
+    // Supabase has three limits that need different advice:
+    // 1. one mail per address per minute ("For security purposes, you can only request this after 52 seconds.")
+    var wait = /security purposes\D*(\d+)\s*sec/i.exec(m);
+    if (wait) return 'Je hebt net al een mail aangevraagd. Wacht nog ' + wait[1] + ' seconden en probeer het dan opnieuw.';
+    if (/security purposes/i.test(m)) return 'Je hebt net al een mail aangevraagd. Wacht een minuut en probeer het dan opnieuw.';
+    // 2. mails per hour for the whole site ("email rate limit exceeded"), very low until there is an own mail sender
+    if (/email rate limit|over_email_send_rate_limit/i.test(m)) return 'De site heeft het afgelopen uur te veel inlogmails verstuurd. Heb je al een mail gekregen? Gebruik de link of code daaruit, of probeer het over een uur opnieuw.';
+    // 3. requests per IP address
+    if (/rate limit|over_request_rate_limit|429/i.test(m)) return 'Te veel pogingen achter elkaar. Probeer het over een paar minuten opnieuw.';
     if (/not.?authori[sz]ed|email_address_not_authorized/i.test(m)) return 'Naar dit e-mailadres kunnen we nog geen code sturen. Tijdens de testfase werkt inloggen alleen voor de organisatie.';
     if (/expired|invalid.*(otp|token)|otp_expired|token has expired/i.test(m)) return 'Deze code klopt niet of is verlopen. Vraag een nieuwe code aan.';
     if (/23505|duplicate key/i.test(m)) return 'Je hebt al een tijd voor dit event in deze categorie. Pas die tijd aan in je lijst.';

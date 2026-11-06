@@ -163,6 +163,7 @@
     signInWithOtp: function (o) {
       window.__calls.push({ t: 'auth', op: 'otp', payload: o });
       if (/ratelimit/.test(o.email)) return later({ data: { user: null, session: null }, error: { message: 'For security purposes, you can only request this after 52 seconds.', status: 429, code: 'over_email_send_rate_limit' } });
+      if (/uurlimiet/.test(o.email)) return later({ data: { user: null, session: null }, error: { message: 'email rate limit exceeded', status: 429, code: 'over_email_send_rate_limit' } });
       if (/extern/.test(o.email)) return later({ data: { user: null, session: null }, error: { message: 'Email address not authorized', status: 400, code: 'email_address_not_authorized' } });
       return later({ data: { user: null, session: null }, error: null });
     },

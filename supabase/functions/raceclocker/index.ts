@@ -15,13 +15,23 @@ import { normalise, VERSION, ymd } from './normalise.ts';
 
 // RaceClocker races the site may show, with the edition (events.id) they belong to and the
 // race day (Amsterdam). On race day the results are refreshed every 15 seconds.
-// Add the race of a new edition here and in assets/config.js (raceclocker).
-const RACES: Record<string, { event: string; date: string }> = {
+// Editions 01-03 are listed here. A newer edition is linked by the organisers in the table
+// events: raceclocker_id (the code from the link) and event_date (the race day).
+type Race = { event: string; date: string | null };
+const RACES: Record<string, Race> = {
   '1fd4d9': { event: 'sim-01', date: '2025-10-12' }, // Hyrox Roelofarendsveen 2025
   // RaceClocker's page says Saturday 14 March, but all laps were tapped on Sunday the 15th.
   '0839eb85': { event: 'sim-02', date: '2026-03-15' }, // Hyrox sim. Roelofarendsveen editie 2
   f4b23f3b: { event: 'sim-03', date: '2026-10-18' }, // Hyrox sim. Roelofarendsveen #3
 };
+
+// deno-lint-ignore no-explicit-any
+async function raceOf(db: any, race: string): Promise<Race | null> {
+  if (RACES[race]) return RACES[race];
+  const { data, error } = await db.from('events').select('id, event_date').eq('raceclocker_id', race).maybeSingle();
+  if (error) console.error('events read', error.message);
+  return data ? { event: data.id, date: data.event_date ?? null } : null;
+}
 
 const LIVE_TTL_S = 15;
 const ARCHIVE_TTL_S = 3600;
@@ -51,16 +61,20 @@ Deno.serve(async (req) => {
   if (req.method !== 'GET') return reply({ error: 'Alleen GET' }, 405);
 
   const race = (new URL(req.url).searchParams.get('race') ?? '').trim().toLowerCase();
-  const cfg = RACES[race];
+  if (!/^[0-9a-f]{4,16}$/.test(race)) return reply({ error: 'Onbekende race' }, 404);
+  const db = admin();
+  const cfg = await raceOf(db, race);
   if (!cfg) return reply({ error: 'Onbekende race' }, 404);
 
-  const db = admin();
   const { data: cached, error: readError } = await db.from('raceclocker_cache').select('fetched_at, payload').eq('race_id', race).maybeSingle();
   if (readError) console.error('cache read', readError.message);
 
   const now = Date.now();
   const today = ymd(now);
-  const ttl = cfg.date === today ? LIVE_TTL_S : ARCHIVE_TTL_S;
+  // Race day unknown (no event_date filled in): the day most participants started on, as far as
+  // the stored results show it, and refreshed often until that is known.
+  const day = cfg.date ?? cached?.payload?.date ?? null;
+  const ttl = day === null || day === today ? LIVE_TTL_S : ARCHIVE_TTL_S;
   const age = cached ? (now - Date.parse(cached.fetched_at)) / 1000 : Infinity;
   if (cached && cached.payload?.v === VERSION && age < ttl) return reply(cached.payload, 200, Math.min(ttl, 60));
 

@@ -27,8 +27,8 @@ window.HYROX_CONFIG = {
   // Officiële tijdwaarneming met RaceClocker: per editie (id in de tabel events) de code uit de
   // RaceClocker-link, bijvoorbeeld raceclocker.com/f4b23f3b. Het leaderboard toont dan de uitslag
   // uit RaceClocker met alle rondetijden, en op de racedag live. Zelf een tijd invullen kan dan
-  // niet meer voor die editie. Nieuwe editie? Zet de code hier en in
-  // supabase/functions/raceclocker/index.ts (met de racedatum).
+  // niet meer voor die editie. Een nieuwe editie hoeft hier niet bij: vul in Supabase in de tabel
+  // events bij die editie raceclocker_id en event_date in (zie README).
   raceclocker: { 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },
 
   // Voorlopig programma. Pas aan of maak leeg ([]) om "programma volgt" te tonen.

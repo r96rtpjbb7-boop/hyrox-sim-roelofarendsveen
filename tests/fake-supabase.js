@@ -72,6 +72,8 @@
     if (t === 'results') return db.results.filter(function (r) { return r.status !== 'rejected' || (r.user_id && r.user_id === uid()); });
     // Stored RaceClocker results: tests put rows in window.__rcCache before the page loads.
     if (t === 'raceclocker_cache') return window.__rcCache || [];
+    // Changes organisers make in the Table Editor: tests put them in window.__eventPatch.
+    if (t === 'events' && window.__eventPatch) return db.events.map(function (e) { return Object.assign({}, e, window.__eventPatch[e.id] || {}); });
     return db[t] || [];
   }
   function checkResult(db, r) {

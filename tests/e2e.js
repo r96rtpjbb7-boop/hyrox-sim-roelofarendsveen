@@ -563,19 +563,21 @@ const wait = (p, ms) => p.waitForTimeout(ms);
   check('RC cache: function down, the stored copy is still shown', (await s3.textContent('[data-row="rc-101"] .nm')) === 'Oude Opslag');
   await ctxS.close();
 
-  // Race day of edition 04 with official timing: live
+  // Race day of edition 04 with official timing: live. The organisers linked the race in the
+  // table events (raceclocker_id), not in config.js; edition 01 is left without timing here.
   const ctxL = await b.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Europe/Amsterdam' });
   await setup(ctxL, errs, 'rclive');
+  await ctxL.addInitScript(() => { window.__eventPatch = { 'sim-04': { raceclocker_id: 'abcd1234', event_date: new Date().toISOString().slice(0, 10) } }; });
   await ctxL.route(/assets\/config\.js/, async rt => {
     const resp = await rt.fetch(); let body = await resp.text();
     body = body.replace("start: '2027-03-14T08:00:00+01:00'", "start: '" + new Date(Date.now() - 60e3).toISOString() + "'")
-      .replace("raceclocker: { 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b', 'sim-04': 'abcd1234' }, rcPollMs: 1500,");
+      .replace("raceclocker: { 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' },", "raceclocker: { 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' }, rcPollMs: 1500,");
     rt.fulfill({ response: resp, body });
   });
   const L = await ctxL.newPage();
   await L.goto(BASE);
   await L.waitForSelector('#lb-live .lb-row');
-  check('live: edition 04 is the default on race day', (await L.$eval('#lb-event', s => s.value)) === 'sim-04');
+  check('live: edition 04 is the default on race day, linked in the table events', (await L.$eval('#lb-event', s => s.value)) === 'sim-04' && ctxL.rc.calls.some(u => /race=abcd1234/.test(u)));
   const onCourse = await L.$$eval('#lb-live .lb-row', rows => rows.map(x => ({ nm: x.querySelector('.nm').textContent, rk: x.querySelector('.rk').textContent, now: x.querySelector('.badge.live').textContent })));
   check('live: athletes on the course, furthest first, with the part they are doing', onCourse.length === 2 && onCourse[0].nm === 'Rennende Ruud' && onCourse[0].rk === '9/16' && onCourse[0].now === 'Nu Roeien' && onCourse[1].now === 'Nu Run 4', onCourse);
   const liveTiles = (await L.textContent('#lb-summary')).replace(/\s+/g, ' ');

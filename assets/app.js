@@ -160,7 +160,16 @@
   // raceclocker_cache. The page reads that table and only asks the function for a fresh copy
   // when the stored one is too old: after 20 seconds on race day, after an hour otherwise. So a
   // hall full of phones on race day does not make the function call RaceClocker for each phone.
-  var RC = CFG.raceclocker || {};
+  // Which edition has which race: editions 01-03 in config.js, newer ones filled in by the
+  // organisers in the table events (column raceclocker_id). The table wins.
+  var RC_CFG = CFG.raceclocker || {}, RC = Object.assign({}, RC_CFG);
+  function rcFromEvents() {
+    var next = Object.assign({}, RC_CFG);
+    state.events.forEach(function (e) { if (e.raceclocker_id) next[e.id] = String(e.raceclocker_id).trim(); });
+    var changed = JSON.stringify(next) !== JSON.stringify(RC);
+    RC = next;
+    return changed;
+  }
   var RC_POLL = CFG.rcPollMs || 20000, RC_KEEP = 3600000;
   var rc = { data: {}, seen: {}, known: {}, fresh: {}, timer: null, tick: null, wait: false, jitter: Math.round(Math.random() * RC_POLL / 4) };
   function rcRace(ev) { return ev && RC[ev] ? String(RC[ev]).toLowerCase() : null; }
@@ -1044,6 +1053,8 @@
     }).then(function (res) {
       if (res.error) { lb.loading = false; lb.error = nlError(res.error); renderLB(); return; }
       state.events = res.data || [];
+      // On race day the hero links to the live results once it knows the edition has timing.
+      if (rcFromEvents()) renderStatic();
       var evs = eventsOf(lb.src);
       lb.ev = evs.length ? evs[0].id : null;
       syncForm();

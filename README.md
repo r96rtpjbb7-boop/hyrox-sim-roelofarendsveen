@@ -30,7 +30,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
   - `start`: alleen de datum (`'2027-03-14'`, de site toont dan "nog 128 dagen") of de datum met de starttijd van de eerste heat (`'2027-03-14T08:00:00+01:00'`, dan komt er een aftelklok tot op de seconde). Met `null` toont de site "datum volgt".
 - `signupUrl`: link naar het inschrijfformulier. Met `null` geven de inschrijfknoppen een melding dat de inschrijving binnenkort opent.
 - `programme`: het tijdschema. Een lege lijst (`[]`) toont "programma volgt".
-- `raceclocker`: per editie de code van de race in RaceClocker, nu `{ 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' }` voor raceclocker.com/1fd4d9, raceclocker.com/0839eb85 en raceclocker.com/f4b23f3b. Een code is niet altijd 8 tekens. Zie RaceClocker hieronder.
+- `raceclocker`: per editie de code van de race in RaceClocker, nu `{ 'sim-01': '1fd4d9', 'sim-02': '0839eb85', 'sim-03': 'f4b23f3b' }` voor raceclocker.com/1fd4d9, raceclocker.com/0839eb85 en raceclocker.com/f4b23f3b. Een code is niet altijd 8 tekens. Nieuwe edities hoeven hier niet bij: die koppel je in de tabel `events`, zie RaceClocker hieronder.
 - `codeLength` (optioneel, standaard 6): moet gelijk zijn aan "Email OTP Length" in Supabase.
 
 ## Supabase
@@ -76,6 +76,7 @@ De site bestaat uit gewone bestanden (HTML, CSS en JavaScript) zonder build-stap
 - **Volgende editie**: voeg hem vooraf toe in Table Editor, `events`, Insert row: `id` `sim-05`, `kind` `sim`, `name` `Editie 05`, `location` `HAL60, Roelofarendsveen`, `sort_order` `5`. Zet daarna in `config.js` bij `nextEdition` het nummer `'05'`, de `eventId` `'sim-05'` en de datum. De site laat de editie pas vanaf de start zien op het leaderboard en in het formulier.
 - **Nieuw officieel event**: bijvoorbeeld `id` `off-rotterdam`, `kind` `official`, `name` `Hyrox Rotterdam`, `sort_order` `103`.
 - **Tijd goed- of afkeuren**: Table Editor, `results`, kolom `status` op `verified` of `rejected`.
+- **Editie koppelen aan RaceClocker**: Table Editor, `events`, bij de editie `raceclocker_id` en `event_date` invullen. Zie RaceClocker hieronder.
 - **Oude uitslagen importeren**: Table Editor, `results`, Insert, Import data from CSV, met de kolommen `athlete_name`, `athlete_club`, `event_id`, `category`, `total_seconds` en bij dubbels `partner_name` (bij relay ook `team_name` en `teammates`). Geïmporteerde tijden horen bij niemand; laat deelnemers die tijden dan niet zelf nog eens invoeren, anders staan ze er twee keer in.
 
 ## RaceClocker (officiële tijdwaarneming)
@@ -89,11 +90,12 @@ RaceClocker deelt de uitslag van een race openbaar als data: `https://raceclocke
 - Kids lopen een eigen, korter format: daar staat alleen de eindtijd.
 - Wat de function overslaat of vreemd vindt, staat in de bewaarde versie onder `skipped` en `issues`. Bekijk dat in de SQL Editor met `select payload->'skipped', payload->'issues' from raceclocker_cache;`.
 
-**Nieuwe editie koppelen**, bijvoorbeeld editie 04:
+**Nieuwe editie koppelen**, bijvoorbeeld editie 04. Daar is geen code voor nodig:
 
 1. Maak de race aan in RaceClocker en noteer de code uit de link (raceclocker.com/**abcd1234**).
-2. Zet in `supabase/functions/raceclocker/index.ts` bij `RACES` een regel `abcd1234: { event: 'sim-04', date: '2027-03-14' },` en deploy de function opnieuw. De datum is de dag waarop de rondes getikt zijn; de kop van de RaceClocker-pagina kan een andere datum tonen (bij editie 02 zaterdag 14 maart, terwijl er op zondag 15 maart is gelopen).
-3. Zet in `assets/config.js` bij `raceclocker` de regel `'sim-04': 'abcd1234'` erbij.
+2. Open in Supabase de Table Editor, tabel `events`, de rij `sim-04`. Vul bij `raceclocker_id` alleen de code in (`abcd1234`) en bij `event_date` de racedag (`2027-03-14`). Klik Save.
+
+De racedag is de dag waarop de rondes getikt worden: op die dag ververst de uitslag live. Zonder `event_date` werkt het ook, maar dan weet de koppeling pas na de eerste starts welke dag de racedag is. Editie 01 tot en met 03 staan nog in `assets/config.js` en in de function; een code in de tabel gaat altijd voor.
 
 Vanaf dan is editie 04 niet meer zelf in te vullen en toont het leaderboard de RaceClocker-uitslag; op de racedag live. In RaceClocker moet de categorie van een deelnemer in de kolom Gender staan (Single Men, Duo Women, Mixed Duo, Relay, Kids, enzovoort), net als bij editie 03. Is Gender leeg, dan kijkt de function in de kolom Custom naar een code zoals bij editie 01: HS, DS, HD, DD of MD (heren, dames of mixed, single of duo).
 

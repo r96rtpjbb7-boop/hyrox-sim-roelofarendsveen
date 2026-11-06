@@ -574,6 +574,14 @@ const wait = (p, ms) => p.waitForTimeout(ms);
     check('no horizontal scroll at ' + w, sw <= w, sw);
     const tops = await q.$$eval('.hero .orgs img', imgs => imgs.map(i => i.getBoundingClientRect()).map(r => Math.round(r.top + r.height / 2)));
     check('club logos side by side at ' + w, tops.length === 2 && Math.abs(tops[0] - tops[1]) <= 2, tops);
+    await q.selectOption('#lb-event', 'all');
+    await q.waitForSelector('[data-row^="at-"]');
+    await q.click('[data-row="at-sim-02-rc-352"]');
+    const swAll = await q.evaluate(() => document.documentElement.scrollWidth);
+    check('all-time: no horizontal scroll at ' + w, swAll <= w, swAll);
+    if (w === 360) { await q.$eval('#lb-summary', e => e.scrollIntoView()); await q.screenshot({ path: 'site-mob-alltime.png' }); }
+    await q.selectOption('#lb-event', 'sim-03');
+    await q.waitForSelector('[data-row="rc-101"]');
     await q.$eval('#leaderboard', e => e.scrollIntoView());
     await wait(q, 200);
     if (w === 390) {
